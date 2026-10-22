@@ -1,119 +1,154 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Pool } from 'pg';
-import { PG_POOL } from './../db/db.module';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { CreateFacturaDto, CreatePagoDto } from './dto/finanzas.dto';
+import { Cliente, EstadoFactura, Factura, MetodoPago, Pago } from './finanzas.entities';
 
-const ESTADOS = ['PENDIENTE', 'PARCIAL', 'PAGADA'];
+const ESTADOS: EstadoFactura[] = ['PENDIENTE', 'PARCIAL', 'PAGADA'];
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const cents = (n: number | string) => Math.round(Number(n) * 100);
+const pgCode = (e: any) => e?.code ?? e?.driverError?.code;
 
 @Injectable()
 export class FinanzasService {
-  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+  constructor(
+    @InjectRepository(Cliente) private readonly clientes: Repository<Cliente>,
+    @InjectRepository(MetodoPago) private readonly metodos: Repository<MetodoPago>,
+    @InjectRepository(Factura) private readonly facturas: Repository<Factura>,
+    @InjectRepository(Pago) private readonly pagos: Repository<Pago>,
+    private readonly dataSource: DataSource,
+  ) {}
 
-  // ---------- Catálogos para los desplegables del formulario ----------
-  async clientes() {
-    return (await this.pool.query('SELECT id, nombre, email FROM cliente ORDER BY nombre')).rows;
+  // ---------- Catálogos para los desplegables ----------
+  listarClientes() {
+    return this.clientes.find({ order: { nombre: 'ASC' } });
   }
 
-  async metodosPago() {
-    return (await this.pool.query('SELECT id, nombre FROM metodo_pago ORDER BY id')).rows;
+  listarMetodosPago() {
+    return this.metodos.find({ order: { id: 'ASC' } });
   }
 
-  // ---------- Formulario de ingreso: factura ----------
+  // ---------- Ingreso: factura ----------
   async crearFactura(d: CreateFacturaDto) {
     if (d.fechaVencimiento < d.fechaEmision) {
       throw new BadRequestException('La fecha de vencimiento no puede ser anterior a la de emisión');
     }
     try {
-      const { rows } = await this.pool.query(
-        `INSERT INTO factura (numero, cliente_id, fecha_emision, fecha_vencimiento, monto_total)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [d.numero, d.clienteId, d.fechaEmision, d.fechaVencimiento, d.montoTotal],
-      );
-      return rows[0];
-    } catch (e: any) {
-      if (e.code === '23505') throw new ConflictException('Ya existe una factura con ese número');
-      if (e.code === '23503') throw new BadRequestException('El cliente indicado no existe');
+      const factura = this.facturas.create({
+        numero: d.numero,
+        clienteId: d.clienteId,
+        fechaEmision: d.fechaEmision,
+        fechaVencimiento: d.fechaVencimiento,
+        montoTotal: d.montoTotal.toFixed(2),
+      });
+      return await this.facturas.save(factura);
+    } catch (e) {
+      if (pgCode(e) === '23505') throw new ConflictException('Ya existe una factura con ese número');
+      if (pgCode(e) === '23503') throw new BadRequestException('El cliente indicado no existe');
       throw e;
     }
   }
 
-  // ---------- Formulario de ingreso: pago (validación de saldo) ----------
+  // ---------- Ingreso: pago (transacción + validación de saldo) ----------
   async registrarPago(facturaId: number, d: CreatePagoDto) {
-    const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      return await this.dataSource.transaction(async (m) => {
+        // Bloqueo de fila: evita que dos pagos simultáneos superen el saldo
+        const factura = await m
+          .getRepository(Factura)
+          .createQueryBuilder('f')
+          .setLock('pessimistic_write')
+          .where('f.id = :id', { id: facturaId })
+          .getOne();
+        if (!factura) throw new NotFoundException('Factura no encontrada');
 
-      // FOR UPDATE evita que dos pagos simultáneos superen el saldo
-      const f = await client.query('SELECT monto_total FROM factura WHERE id = $1 FOR UPDATE', [facturaId]);
-      if (!f.rowCount) throw new NotFoundException('Factura no encontrada');
+        const { total } = await m
+          .getRepository(Pago)
+          .createQueryBuilder('p')
+          .select('COALESCE(SUM(p.monto), 0)', 'total')
+          .where('p.facturaId = :id', { id: facturaId })
+          .getRawOne();
 
-      const pagado = await client.query(
-        'SELECT COALESCE(SUM(monto), 0) AS total FROM pago WHERE factura_id = $1',
-        [facturaId],
-      );
-      const saldo = cents(f.rows[0].monto_total) - cents(pagado.rows[0].total);
-      const monto = cents(d.monto);
+        const saldo = cents(factura.montoTotal) - cents(total);
+        const monto = cents(d.monto);
+        if (monto > saldo) {
+          throw new BadRequestException(
+            `El pago supera el saldo pendiente de la factura (saldo: ${(saldo / 100).toFixed(2)})`,
+          );
+        }
 
-      if (monto > saldo) {
-        throw new BadRequestException(
-          `El pago supera el saldo pendiente de la factura (saldo: ${(saldo / 100).toFixed(2)})`,
+        const pago = await m.save(
+          m.create(Pago, {
+            facturaId,
+            metodoPagoId: d.metodoPagoId,
+            fechaPago: d.fechaPago,
+            monto: d.monto.toFixed(2),
+          }),
         );
-      }
+        const estado: EstadoFactura = monto === saldo ? 'PAGADA' : 'PARCIAL';
+        await m.update(Factura, { id: facturaId }, { estado });
 
-      const ins = await client.query(
-        `INSERT INTO pago (factura_id, metodo_pago_id, fecha_pago, monto)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [facturaId, d.metodoPagoId, d.fechaPago, d.monto],
-      );
-      const estado = monto === saldo ? 'PAGADA' : 'PARCIAL';
-      await client.query('UPDATE factura SET estado = $1 WHERE id = $2', [estado, facturaId]);
-
-      await client.query('COMMIT');
-      return { pago: ins.rows[0], estadoFactura: estado, saldoRestante: (saldo - monto) / 100 };
-    } catch (e: any) {
-      await client.query('ROLLBACK');
-      if (e.code === '23503') throw new BadRequestException('El método de pago indicado no existe');
+        return { pago, estadoFactura: estado, saldoRestante: (saldo - monto) / 100 };
+      });
+    } catch (e) {
+      if (pgCode(e) === '23503') throw new BadRequestException('El método de pago indicado no existe');
       throw e;
-    } finally {
-      client.release();
     }
   }
 
-  // ---------- Formulario de consulta ----------
+  // ---------- Consulta ----------
   async listarFacturas(estado?: string, desde?: string, hasta?: string) {
-    if (estado && !ESTADOS.includes(estado)) {
+    if (estado && !ESTADOS.includes(estado as EstadoFactura)) {
       throw new BadRequestException(`Estado inválido. Usa: ${ESTADOS.join(', ')}`);
     }
-    const { rows } = await this.pool.query(
-      `SELECT f.id, f.numero, c.nombre AS cliente, f.fecha_emision, f.fecha_vencimiento,
-              f.monto_total, f.estado, f.monto_total - COALESCE(SUM(p.monto), 0) AS saldo
-       FROM factura f
-       JOIN cliente c ON c.id = f.cliente_id
-       LEFT JOIN pago p ON p.factura_id = f.id
-       WHERE ($1::text IS NULL OR f.estado = $1)
-         AND ($2::date IS NULL OR f.fecha_emision >= $2)
-         AND ($3::date IS NULL OR f.fecha_emision <= $3)
-       GROUP BY f.id, c.nombre
-       ORDER BY f.fecha_emision DESC, f.id DESC`,
-      [estado ?? null, desde ?? null, hasta ?? null],
-    );
-    return rows;
+    if ((desde && !FECHA.test(desde)) || (hasta && !FECHA.test(hasta))) {
+      throw new BadRequestException('Las fechas deben tener formato AAAA-MM-DD');
+    }
+
+    const qb = this.facturas.createQueryBuilder('f').leftJoinAndSelect('f.cliente', 'c');
+    if (estado) qb.andWhere('f.estado = :estado', { estado });
+    if (desde) qb.andWhere('f.fechaEmision >= :desde', { desde });
+    if (hasta) qb.andWhere('f.fechaEmision <= :hasta', { hasta });
+    const lista = await qb.orderBy('f.fechaEmision', 'DESC').addOrderBy('f.id', 'DESC').getMany();
+    if (!lista.length) return [];
+
+    // Total pagado por factura, en una sola consulta
+    const sumas = await this.pagos
+      .createQueryBuilder('p')
+      .select('p.facturaId', 'facturaId')
+      .addSelect('SUM(p.monto)', 'total')
+      .where('p.facturaId IN (:...ids)', { ids: lista.map((f) => f.id) })
+      .groupBy('p.facturaId')
+      .getRawMany<{ facturaId: number; total: string }>();
+    const pagado = new Map(sumas.map((s) => [Number(s.facturaId), cents(s.total)]));
+
+    return lista.map((f) => ({
+      id: f.id,
+      numero: f.numero,
+      cliente: f.cliente.nombre,
+      fechaEmision: f.fechaEmision,
+      fechaVencimiento: f.fechaVencimiento,
+      montoTotal: Number(f.montoTotal),
+      estado: f.estado,
+      saldo: (cents(f.montoTotal) - (pagado.get(f.id) ?? 0)) / 100,
+    }));
   }
 
   async obtenerFactura(id: number) {
-    const f = await this.pool.query(
-      `SELECT f.*, c.nombre AS cliente FROM factura f JOIN cliente c ON c.id = f.cliente_id WHERE f.id = $1`,
-      [id],
-    );
-    if (!f.rowCount) throw new NotFoundException('Factura no encontrada');
-    const pagos = await this.pool.query(
-      `SELECT p.id, p.fecha_pago, p.monto, m.nombre AS metodo
-       FROM pago p JOIN metodo_pago m ON m.id = p.metodo_pago_id
-       WHERE p.factura_id = $1 ORDER BY p.fecha_pago, p.id`,
-      [id],
-    );
-    const pagado = pagos.rows.reduce((acc, p) => acc + cents(p.monto), 0);
-    return { ...f.rows[0], pagos: pagos.rows, saldo: (cents(f.rows[0].monto_total) - pagado) / 100 };
+    const factura = await this.facturas.findOne({ where: { id }, relations: { cliente: true } });
+    if (!factura) throw new NotFoundException('Factura no encontrada');
+
+    const pagos = await this.pagos.find({
+      where: { facturaId: id },
+      relations: { metodoPago: true },
+      order: { fechaPago: 'ASC', id: 'ASC' },
+    });
+    const pagado = pagos.reduce((acc, p) => acc + cents(p.monto), 0);
+
+    return {
+      ...factura,
+      pagos: pagos.map((p) => ({ id: p.id, fechaPago: p.fechaPago, monto: Number(p.monto), metodo: p.metodoPago.nombre })),
+      saldo: (cents(factura.montoTotal) - pagado) / 100,
+    };
   }
 }

@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: finanzas-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-erp_legos}
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Los .sql de esta carpeta se ejecutan solo la primera vez (cuando el volumen está vacío)
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp} -d ${POSTGRES_DB:-erp_legos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: finanzas-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy # la API arranca cuando PostgreSQL ya responde
+    environment:
+      DB_HOST: db # nombre del servicio de arriba, no "localhost"
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-erp_legos}
+      DB_USER: ${POSTGRES_USER:-erp}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-erp_pass}
+      DB_SCHEMA: finanzas
+      DB_SSL: "false"
+      PORT: 3000
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

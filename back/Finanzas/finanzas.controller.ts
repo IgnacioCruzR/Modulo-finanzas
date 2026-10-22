@@ -8,12 +8,12 @@ export class FinanzasController {
 
   @Get('clientes')
   clientes() {
-    return this.service.clientes();
+    return this.service.listarClientes();
   }
 
   @Get('metodos-pago')
   metodosPago() {
-    return this.service.metodosPago();
+    return this.service.listarMetodosPago();
   }
 
   @Post('facturas')
