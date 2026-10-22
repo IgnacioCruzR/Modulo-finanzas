@@ -22,8 +22,9 @@
   right: 0;
   bottom: -12px;
   left: 0;
-  height: 13px;
-  background: radial-gradient(circle at 12px 0, #fff 11px, transparent 11.6px) 0 0 / 68px 13px repeat-x;
+  height: 14px;
+  background: repeating-linear-gradient(90deg, #f33435 0 38px, transparent 38px 68px);
+  filter: drop-shadow(0 3px 1px #9e202322);
   content: '';
   pointer-events: none;
 }
@@ -52,31 +53,41 @@
   flex: 1;
   align-items: center;
   justify-content: center;
-  gap: clamp(8px, 1.9vw, 26px);
+  gap: clamp(5px, 0.7vw, 10px);
 }
 
 .header-nav-link {
-  min-height: 44px;
+  position: relative;
+  min-height: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 7px 10px;
-  border: 0;
+  padding: 7px 12px;
+  border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
   color: #fff;
   cursor: pointer;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   white-space: nowrap;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
-.header-nav-link:hover,
 .header-nav-link.is-active {
-  background: #bf2528;
-  color: #fff4c7;
+  border-color: #ffffff3d;
+  background: #a91f25;
+  color: #ffe27e;
+}
+
+.header-nav-link:hover:not(.is-active) {
+  background: #ffffff20;
+  color: #ffe27e;
+}
+
+.header-nav-link:active {
+  background: #8d1b21;
 }
 
 .header-actions {
@@ -492,8 +503,8 @@
 
   .header-nav-link {
     gap: 5px;
-    padding-right: 7px;
-    padding-left: 7px;
+    padding-right: 6px;
+    padding-left: 6px;
     font-size: 15px;
   }
 
