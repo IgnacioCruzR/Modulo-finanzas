@@ -152,7 +152,13 @@ function MonthlyChart() {
         </div>
       </div>
       <div className="chart-scroll">
-        <svg className="monthly-chart" viewBox="0 0 930 280" role="img" aria-labelledby="chart-title chart-description">
+        <svg
+          className="monthly-chart"
+          viewBox="0 0 930 280"
+          preserveAspectRatio="none"
+          role="img"
+          aria-labelledby="chart-title chart-description"
+        >
           <desc id="chart-description">
             Comparación mensual de ingresos y gastos en pesos. Las barras muestran los valores mensuales y las líneas su
             tendencia.
@@ -221,22 +227,35 @@ function Dashboard() {
           <BrandMark />
           <span>LESGO</span>
         </a>
-        <div className="header-divider" />
-        <h1>Panel de Control Financiero</h1>
+        <nav className="header-nav" aria-label="Navegación principal">
+          {navigation.map((item) => (
+            <button
+              className={`header-nav-link${activePage === item.label ? ' is-active' : ''}`}
+              key={item.label}
+              type="button"
+              aria-current={activePage === item.label ? 'page' : undefined}
+              onClick={() => setActivePage(item.label)}
+            >
+              <Icon name={item.icon} size={18} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
         <div className="header-actions">
-          <button className="header-action" type="button">
+          <button className="header-action" type="button" aria-label="Mi Perfil">
             <Icon name="user" size={21} />
-            <span>Mi Perfil</span>
+            <span className="action-label">Mi Perfil</span>
           </button>
           <div className="notification-wrap">
             <button
               className="header-action"
               type="button"
+              aria-label="Notificaciones"
               aria-expanded={notificationsOpen}
               onClick={() => setNotificationsOpen((isOpen) => !isOpen)}
             >
               <Icon name="bell" size={22} />
-              <span>Notificaciones</span>
+              <span className="action-label">Notificaciones</span>
             </button>
             {notificationsOpen && (
               <div className="notification-popover" role="status">
@@ -244,32 +263,22 @@ function Dashboard() {
               </div>
             )}
           </div>
-          <button className="header-action" type="button">
+          <button className="header-action" type="button" aria-label="Cerrar sesión">
             <Icon name="logout" size={21} />
-            <span>Cerrar sesión</span>
+            <span className="action-label">Cerrar sesión</span>
           </button>
         </div>
       </header>
 
       <div className="workspace">
-        <aside className="sidebar" aria-label="Navegación principal">
-          <nav className="sidebar-nav">
-            {navigation.map((item) => (
-              <button
-                className={`nav-card${activePage === item.label ? ' is-active' : ''}`}
-                key={item.label}
-                type="button"
-                aria-current={activePage === item.label ? 'page' : undefined}
-                onClick={() => setActivePage(item.label)}
-              >
-                <Icon name={item.icon} size={48} />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
-
         <main className="dashboard-content">
+          <div className="page-heading">
+            <div>
+              <p className="page-eyebrow">LESGO · MÓDULO FINANCIERO</p>
+              <h1>Panel de Control Financiero</h1>
+            </div>
+            <span className="period-badge">Resumen anual</span>
+          </div>
           <section className="metrics-grid" aria-label="Resumen financiero">
             <article className="metric-card">
               <h2>Ingresos Totales</h2>
