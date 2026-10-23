@@ -67,3 +67,19 @@ DB_SCHEMA=finanzas
 DB_SSL=true
 ```
 > **Nota de seguridad:** no subas `.env` al repositorio ni compartas credenciales por chats públicos. Cada integrante debe crear su propio `.env` local a partir de `.env.example`.
+
+## Registro de egresos
+
+La API expone `GET /payments/obligations`, `GET /payments/summary`, `GET /payments`,
+`GET /payments/:id` y `POST /payments`. El POST requiere el encabezado
+`Idempotency-Key` (UUID) y registra el movimiento, el pago y el saldo dentro de una
+transacción PostgreSQL. Estas rutas usan tablas nuevas y separadas de las facturas
+de clientes existentes.
+
+Antes de activar `VITE_PAYMENTS_MODE=api` en el frontend, revisa y aplica
+manualmente `database/migrations/20261023_outgoing_payments.sql` en el esquema
+`finanzas`, y carga obligaciones reales desde Compras o Recursos Humanos. La
+migración no se ejecuta al iniciar la API y no incorpora datos ficticios.
+
+Este backend todavía no tiene autenticación ni control de roles; proteger las rutas
+para administradores antes de habilitarlas en un entorno compartido.

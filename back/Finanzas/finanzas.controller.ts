@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
-import { CreateFacturaDto, CreatePagoDto } from './finanzas.dto';
+import { CreateFacturaDto, CreatePagoDto } from './dto/finanzas.dto';
 import { FinanzasService } from './finanzas.service';
 
 @Controller()

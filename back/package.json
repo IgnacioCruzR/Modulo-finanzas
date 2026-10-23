@@ -1,10 +1,29 @@
 {
+  "name": "lesgo-finanzas-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only main.ts"
+  },
   "dependencies": {
+    "@nestjs/common": "^12.2.0",
     "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.2.0",
+    "@nestjs/platform-express": "^12.2.0",
     "@nestjs/typeorm": "^12.0.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
     "typeorm": "^1.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "~5.7.2"
   }
 }

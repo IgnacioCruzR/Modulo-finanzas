@@ -27,6 +27,22 @@ npm run build
 npm run preview
 ```
 
+## Registro de pagos
+
+En desarrollo, la pestaña usa datos de demostración guardados en el almacenamiento
+local del navegador. Se identifican como demostrativos y no representan movimientos
+bancarios reales.
+
+Para conectarla a la API:
+
+```env
+VITE_PAYMENTS_MODE=api
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+En modo API, los errores de conexión se muestran en la pantalla y no se sustituyen
+silenciosamente por datos locales.
+
 ## Estructura
 
 ```text
