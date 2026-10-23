@@ -35,42 +35,8 @@ back/
 La configuración se lee desde un archivo `.env` en la raíz del proyecto. **Este archivo contiene credenciales: nunca se sube a Git** (verifica que `.env` esté en el `.gitignore`).
 
 
-### Variables solo para Docker Compose
 
-Definen el PostgreSQL **local** que levanta `docker-compose.yml`. Si no las defines, se usan los valores por defecto indicados.
-
-| Variable | Valor por defecto |
-|---|---|
-| `POSTGRES_DB` | `erp_legos` |
-| `POSTGRES_USER` | `erp` |
-| `POSTGRES_PASSWORD` | `erp_pass` |
-
-> Con Docker Compose, la API **ignora** `DB_HOST`, `DB_USER`, etc. del `.env`: el compose las define por su cuenta para que apunten al contenedor `db`. Las `DB_*` del `.env` se usan al ejecutar sin Docker
-
-## 4. Opción A: ejecutar con Docker (recomendada)
-
-Levanta PostgreSQL local con los datos ya cargados y la API, sin instalar nada más.
-
-```bash
-docker compose up --build
-```
-
-La primera vez, PostgreSQL ejecuta automáticamente `sql/schema_datos.sql`, que crea el esquema, las tablas y más de 10 registros por tabla. La API queda disponible en **http://localhost:3000**.
-
-Prueba rápida: abre http://localhost:3000/facturas en el navegador; debe mostrar una lista de facturas en JSON.
-
-Comandos útiles:
-
-```bash
-docker compose up -d --build   # levantar en segundo plano
-docker compose logs -f api     # ver los logs de la API
-docker compose down            # apagar (conserva los datos)
-docker compose down -v         # apagar y BORRAR los datos (para recargar el SQL desde cero)
-```
-
-> El script SQL solo se ejecuta cuando el volumen de datos está vacío. Si modificas el script, necesitas `docker compose down -v` y volver a levantar para que se aplique.
-
-## 5. Opción B: ejecutar sin Docker contra una BD existente
+## 4.Conexión a la base de datos
 
 Sirve para desarrollar con recarga automática o para conectarse a la **base de datos de AWS** del curso.
 
@@ -79,15 +45,13 @@ Sirve para desarrollar con recarga automática o para conectarse a la **base de 
    npm install
    ```
 2. Completa tu `.env` con los datos de conexión (host, usuario, contraseña, esquema asignado). Para AWS usa `DB_SSL=true`.
-3. Asegúrate de que el esquema y las tablas existan (ver [sección 6](#6-cargar-el-esquema-y-los-datos-iniciales)).
+3. Asegúrate de que el esquema y las tablas existan.
 4. Inicia la API:
    ```bash
    npm run start:dev      # desarrollo, con recarga automática
    # o bien:
    npm run build && npm run start:prod
    ```
-
-**Variante: PostgreSQL en Docker y API en tu máquina.** Levanta solo la base de datos y apunta tu `.env` a ella:
 
 ```bash
 docker compose up -d db
@@ -102,6 +66,4 @@ DB_PASSWORD=#####
 DB_SCHEMA=finanzas
 DB_SSL=false
 ```
-
-
 > **Nota de seguridad:** no subas `.env` al repositorio ni compartas credenciales por chats públicos. Cada integrante debe crear su propio `.env` local a partir de `.env.example`.
