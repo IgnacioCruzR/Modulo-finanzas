@@ -4,11 +4,11 @@ export type FinancePage = 'Dashboard' | 'Registro de pagos' | 'Emisión de infor
 
 type IconName = 'dashboard' | 'payments' | 'reports' | 'settings' | 'user' | 'bell' | 'logout';
 
-const navigation: { label: FinancePage; icon: IconName }[] = [
-  { label: 'Dashboard', icon: 'dashboard' },
-  { label: 'Registro de pagos', icon: 'payments' },
-  { label: 'Emisión de informes', icon: 'reports' },
-  { label: 'Configuraciones', icon: 'settings' },
+const navigation: { page: FinancePage; label: string; icon: IconName }[] = [
+  { page: 'Dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { page: 'Registro de pagos', label: 'Gestión de caja', icon: 'payments' },
+  { page: 'Emisión de informes', label: 'Emisión de informes', icon: 'reports' },
+  { page: 'Configuraciones', label: 'Configuraciones', icon: 'settings' },
 ];
 
 function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
@@ -118,11 +118,11 @@ export function FinanceLayout({
         <nav className="header-nav" aria-label="Navegación principal">
           {navigation.map((item) => (
             <button
-              className={`header-nav-link${activePage === item.label ? ' is-active' : ''}`}
-              key={item.label}
+              className={`header-nav-link${activePage === item.page ? ' is-active' : ''}`}
+              key={item.page}
               type="button"
-              aria-current={activePage === item.label ? 'page' : undefined}
-              onClick={() => onNavigate(item.label)}
+              aria-current={activePage === item.page ? 'page' : undefined}
+              onClick={() => onNavigate(item.page)}
             >
               <Icon name={item.icon} size={18} />
               <span>{item.label}</span>

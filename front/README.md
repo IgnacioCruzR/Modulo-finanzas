@@ -27,21 +27,19 @@ npm run build
 npm run preview
 ```
 
-## Registro de pagos
+## Gestión de caja
 
-En desarrollo, la pestaña usa datos de demostración guardados en el almacenamiento
-local del navegador. Se identifican como demostrativos y no representan movimientos
-bancarios reales.
+La pestaña visible como «Gestión de caja» usa movimientos y decisiones demostrativos
+guardados en `localStorage` en esta versión. Autorizar o rechazar solo cambia el estado
+de la simulación; no ejecuta pagos, no actualiza saldos ni constituye autorización real.
+Las solicitudes manuales también se crean como pendientes demostrativas.
 
-Para conectarla a la API:
+El flujo de pagos anterior permanece en `src/features/payments/PaymentsPage.tsx` y
+conserva su servicio/API, pero no es la interfaz actualmente enlazada en la navegación.
+La gestión de caja todavía no consume endpoints.
 
-```env
-VITE_PAYMENTS_MODE=api
-VITE_API_BASE_URL=http://localhost:3000
-```
-
-En modo API, los errores de conexión se muestran en la pantalla y no se sustituyen
-silenciosamente por datos locales.
+Las autorizaciones reales requieren identidad, permisos y validaciones en el backend
+antes de conectarse a cualquier módulo o flujo financiero.
 
 ## Estructura
 
