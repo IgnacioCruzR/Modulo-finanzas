@@ -64,6 +64,6 @@ DB_NAME=#####
 DB_USER=#####
 DB_PASSWORD=#####
 DB_SCHEMA=finanzas
-DB_SSL=false
+DB_SSL=true
 ```
 > **Nota de seguridad:** no subas `.env` al repositorio ni compartas credenciales por chats públicos. Cada integrante debe crear su propio `.env` local a partir de `.env.example`.
