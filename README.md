@@ -1,5 +1,19 @@
 # Módulo de Finanzas
 
+## Base local activa
+
+Frontend, API y base local se inician desde la raíz con `docker compose up -d --wait`.
+Abrir **http://localhost:8080** para utilizar la interfaz de demostración original.
+Después de la reversión parcial, los formularios conectados, POST transaccionales
+y pruebas automatizadas quedan pendientes para el equipo. NestJS conserva la
+conexión, entidades, contratos y consultas GET; la base y Docker se mantienen.
+Utiliza PostgreSQL 17 en `localhost:15433`, base `erp_local`, esquema `finanzas`.
+Consultar [la guía local](database/local/USO_LOCAL.md) para credenciales,
+persistencia y pruebas. La [API activa](back/Finanzas/v2/README.md) utiliza las
+seis tablas originales más el soporte de cuotas y Administrador 1 como usuario local de prueba en
+`http://localhost:3000/api/finanzas`. El Compose de `back/` corresponde al modelo
+anterior y se conserva como referencia.
+
 Proyecto del módulo financiero del ERP.
 
 ## Estructura del repositorio
@@ -26,11 +40,10 @@ Consulta [front/README.md](front/README.md) para conocer su estructura y comando
 
 ## Backend y base de datos
 
-Las carpetas [back](back/README.md) y [database](database/README.md) están
-preparadas para organizar la API, las migraciones y los scripts de PostgreSQL.
-La base indicada para el proyecto usa el esquema `finanzas` y permite consultar
-entidades comunes del esquema `public`. La documentación recibida no incluye el
-detalle de las tablas y columnas.
+La API NestJS con TypeORM usa el modelo base y la ampliación de cuotas de `database/local/sql/`.
+La identidad mock de consulta es Administrador 1. La base remota del
+profesor no está conectada. Los archivos de modelos anteriores se conservan
+como referencia, pero no deben ejecutarse sobre la base v2.
 
 La conexión y las credenciales de PostgreSQL deben manejarse desde el backend,
 nunca desde el frontend.

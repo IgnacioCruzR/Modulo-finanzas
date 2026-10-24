@@ -1,0 +1,17 @@
+# Opcional para redes que utilizan una CA de confianza de Windows.
+# docker compose -f compose.yaml -f compose.ca.yaml build
+services:
+  api:
+    build:
+      secrets:
+        - source: npm_ca
+          target: npm_ca
+  frontend:
+    build:
+      secrets:
+        - source: npm_ca
+          target: npm_ca
+
+secrets:
+  npm_ca:
+    file: ./.npm-ca.local

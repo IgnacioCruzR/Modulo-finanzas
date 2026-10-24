@@ -1,5 +1,21 @@
 # Backend – Módulo de Finanzas
 
+## Modelo activo: Finanzas v2
+
+La API activa permite solo consultas sobre el modelo del ZIP y su ampliación
+de cuotas; conserva la conexión TypeORM y el usuario mock local
+Administrador 1. Desde la raíz: `docker compose up -d --wait`. Contrato,
+configuración y pruebas en [Finanzas/v2/README.md](Finanzas/v2/README.md).
+El frontend original está en http://localhost:8080 y funciona en modo demostración.
+Los POST transaccionales y las pruebas añadidas se retiraron para que el equipo
+los implemente. Los DTO y payloads se conservan como contrato de referencia.
+
+## Documentación del modelo anterior (referencia)
+
+El contenido siguiente se conserva para el trabajo previo del equipo. Sus
+entidades y rutas no se registran en la API v2 y su Compose no se usa con la base
+actual. No ejecutar sus scripts de creación sobre la base v2.
+
 
 ## 1. Requisitos
 

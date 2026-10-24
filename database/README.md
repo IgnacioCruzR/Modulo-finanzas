@@ -1,5 +1,19 @@
 # Base de datos
 
+## Modelo activo
+
+El modelo aprobado está en `local/sql/`: seis tablas originales más dos tablas
+para cuotas/aplicaciones, funciones y vistas. Ver [CUOTAS.md](local/CUOTAS.md).
+Usar el Compose de la raíz y consultar [USO_LOCAL.md](local/USO_LOCAL.md).
+El frontend de demostración está en http://localhost:8080 y la base en localhost:15433.
+La API conserva solo consultas GET; las escrituras desde la aplicación quedan
+pendientes para el equipo. No se revirtieron datos, cuotas ni funciones SQL.
+
+## Modelo anterior (referencia)
+
+Los scripts de `migrations/` que se describen a continuación pertenecen al modelo
+anterior; no se ejecutan sobre la base v2.
+
 Esta carpeta se reserva para los recursos de PostgreSQL del proyecto:
 
 - `migrations/`: cambios versionados del esquema.
