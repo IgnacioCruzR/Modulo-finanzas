@@ -1,5 +1,5 @@
-import { BadRequestException, Controller, Get, Injectable, Param, PipeTransform, Query, UseGuards } from '@nestjs/common';
-import { FiltrosCuentaDto, FiltrosPagoDto } from './finanzas-v2.dto';
+import { BadRequestException, Body, Controller, Get, HttpCode, Injectable, Param, PipeTransform, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { CrearPagoDto, DecisionPagoDto, FiltrosCuentaDto, FiltrosPagoDto } from './finanzas-v2.dto';
 import { FinanzasV2Service } from './finanzas-v2.service';
 import { ADMIN_PRUEBA, MockAdminGuard } from './mock-admin.guard';
 
@@ -32,4 +32,21 @@ export class FinanzasV2Controller {
 
   @Get('caja/saldo') saldo() { return this.service.saldo(); }
   @Get('movimientos') movimientos() { return this.service.movimientos(); }
+
+
+
+  @Post('pagos') crearPago(@Body() dto: CrearPagoDto) { return this.service.crearPago(dto); }
+
+  @Post('pagos/:id/decision') @HttpCode(200)
+  decidirPago(@Param('id', IdFinanzasPipe) id: string, @Body() dto: DecisionPagoDto, @Req() req: { usuario: typeof ADMIN_PRUEBA }) {
+    return this.service.decidirPago(id, dto, req.usuario.id);
+  }
+
+  @Post('pagos/:id/ejecutar') @HttpCode(200)
+  ejecutarPago(@Param('id', IdFinanzasPipe) id: string, @Body() body: Record<string, unknown>) {
+    if (body && Object.keys(body).length > 0) throw new BadRequestException('Este endpoint no recibe datos; envía un cuerpo vacío {}.');
+    return this.service.ejecutarPago(id);
+  }
+
+
 }
