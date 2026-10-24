@@ -14,9 +14,19 @@ http://localhost:8080. Para reconstruir con la CA local de este equipo:
 `docker compose -f compose.yaml -f compose.ca.yaml build` y luego
 `docker compose up -d --no-build --wait`.
 
-NestJS conserva conexión, entidades, contratos DTO y rutas GET. Los POST del
-modelo v2 no están implementados en el estado actual. La base conserva sus
-cuentas, cuotas, aplicaciones, funciones y datos anteriores.
+La API NestJS activa permite consultar cuentas por cobrar y procesar pagos en
+tres pasos: crear una solicitud, aprobarla o rechazarla y ejecutarla. El frontend
+de demostración descrito aquí aún no consume esos endpoints. La base conserva
+sus cuentas, cuotas, aplicaciones, funciones y datos anteriores.
+
+La API expone `GET /api/finanzas/cuentas-cobrar`,
+`POST /api/finanzas/pagos`,
+`POST /api/finanzas/pagos/:id/decision` y
+`POST /api/finanzas/pagos/:id/ejecutar`. El backend no expone
+`/pagos/:id/aprobar` ni `/cuentas-por-cobrar`.
+
+**Nota técnica:** `finanzas.cuenta_financiera` opera con una única caja,
+restringida a `id_cuenta = 1`.
 
 La vista inicial presenta el dashboard del mockup con indicadores y un gráfico
 mensual de demostración; los datos se reemplazarán por información de la API

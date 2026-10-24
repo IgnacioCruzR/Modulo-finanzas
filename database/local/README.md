@@ -4,6 +4,9 @@
 
 PostgreSQL local Docker con **seis tablas** propias en `finanzas`: `cuenta_cobrar`, `cuenta_pagar`, `pago`, `autorizacion_pago`, `movimiento_financiero`, `cuenta_financiera`. Una vista `v_saldo_caja` y dos funciones SQL para decisiones y ejecución.
 
+**Nota técnica:** `cuenta_financiera` tiene una restricción de caja única:
+`id_cuenta = 1`.
+
 No implementa backend ni interfaz; `json/ejemplos_api.json` son **contratos propuestos** para Codex. Solo para operaciones simuladas de un ERP académico. La base del profesor NO se toca.
 
 ## Estructura

@@ -6,8 +6,13 @@ El modelo aprobado está en `local/sql/`: seis tablas originales más dos tablas
 para cuotas/aplicaciones, funciones y vistas. Ver [CUOTAS.md](local/CUOTAS.md).
 Usar el Compose de la raíz y consultar [USO_LOCAL.md](local/USO_LOCAL.md).
 El frontend de demostración está en http://localhost:8080 y la base en localhost:15433.
-La API conserva solo consultas GET; las escrituras desde la aplicación quedan
-pendientes para el equipo. No se revirtieron datos, cuotas ni funciones SQL.
+La API activa consulta cuentas por cobrar y gestiona pagos mediante solicitud,
+decisión y ejecución. La ruta de consulta implementada es
+`GET /api/finanzas/cuentas-cobrar`; la decisión usa
+`POST /api/finanzas/pagos/:id/decision`.
+
+**Nota técnica:** `finanzas.cuenta_financiera` tiene una restricción de caja
+única que exige `id_cuenta = 1`.
 
 ## Modelo anterior (referencia)
 

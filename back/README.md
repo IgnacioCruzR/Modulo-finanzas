@@ -2,13 +2,28 @@
 
 ## Modelo activo: Finanzas v2
 
-La API activa permite solo consultas sobre el modelo del ZIP y su ampliación
-de cuotas; conserva la conexión TypeORM y el usuario mock local
-Administrador 1. Desde la raíz: `docker compose up -d --wait`. Contrato,
-configuración y pruebas en [Finanzas/v2/README.md](Finanzas/v2/README.md).
-El frontend original está en http://localhost:8080 y funciona en modo demostración.
-Los POST transaccionales y las pruebas añadidas se retiraron para que el equipo
-los implemente. Los DTO y payloads se conservan como contrato de referencia.
+La API activa usa el modelo Finanzas v2, conexión TypeORM y Administrador 1
+como usuario mock local. Desde la raíz: `docker compose up -d --wait`.
+Contrato, configuración y endpoints en [Finanzas/v2/README.md](Finanzas/v2/README.md).
+El frontend original está en http://localhost:8080 y funciona en modo demostración;
+no consume todavía los endpoints de esta API.
+
+## API Sprint 2
+
+Todas las rutas tienen el prefijo `/api/finanzas`.
+
+- `GET /cuentas-cobrar`: lista las cuentas por cobrar.
+- `GET /cuentas-cobrar/:id`: consulta la cuenta con sus cuotas.
+- `POST /pagos`: crea una solicitud pendiente.
+- `POST /pagos/:id/decision`: aprueba o rechaza el pago.
+- `POST /pagos/:id/ejecutar`: ejecuta el pago aprobado, crea el movimiento
+  financiero y aplica el pago a la deuda y sus cuotas.
+
+La ruta de decisión usa el segmento `/decision` (no `/aprobar`) y el listado
+usa `/cuentas-cobrar` (no `/cuentas-por-cobrar`).
+
+**Nota técnica:** `finanzas.cuenta_financiera` permite una sola caja, con
+`id_cuenta = 1`.
 
 ## Documentación del modelo anterior (referencia)
 
@@ -84,7 +99,7 @@ DB_SSL=true
 ```
 > **Nota de seguridad:** no subas `.env` al repositorio ni compartas credenciales por chats públicos. Cada integrante debe crear su propio `.env` local a partir de `.env.example`.
 
-## Registro de egresos
+## Registro de egresos del modelo anterior
 
 La API expone `GET /payments/obligations`, `GET /payments/summary`, `GET /payments`,
 `GET /payments/:id` y `POST /payments`. El POST requiere el encabezado
