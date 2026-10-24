@@ -2,6 +2,22 @@
 
 Aplicación web del módulo financiero, construida con React, TypeScript y Vite.
 
+## Estado actual después de la reversión parcial
+
+Se restauró la interfaz original del equipo. No está conectada a la base local:
+las operaciones de caja usan la demostración en `localStorage`. Se retiraron
+nuestro formulario conectado, el cliente compartido y las pruebas automatizadas
+para que el equipo implemente esas tareas. Los archivos originales se conservan.
+
+Docker continúa disponible: desde la raíz, `docker compose up -d --wait` y abrir
+http://localhost:8080. Para reconstruir con la CA local de este equipo:
+`docker compose -f compose.yaml -f compose.ca.yaml build` y luego
+`docker compose up -d --no-build --wait`.
+
+NestJS conserva conexión, entidades, contratos DTO y rutas GET. Los POST del
+modelo v2 no están implementados en el estado actual. La base conserva sus
+cuentas, cuotas, aplicaciones, funciones y datos anteriores.
+
 La vista inicial presenta el dashboard del mockup con indicadores y un gráfico
 mensual de demostración; los datos se reemplazarán por información de la API
 cuando el backend esté disponible.
