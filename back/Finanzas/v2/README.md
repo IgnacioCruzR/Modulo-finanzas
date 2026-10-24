@@ -1,8 +1,9 @@
 # API local Finanzas v2
 
-Estado actual: **solo consulta**. Se conservaron NestJS, TypeORM, entidades, DTO y
-contratos. Se retiraron los POST y la lógica de escritura añadidos para que el
-equipo implemente sus tareas. La base y sus funciones SQL permanecen intactas.
+La API activa permite consultar cuentas y gestionar pagos transaccionales en
+tres pasos: crear la solicitud, aprobarla o rechazarla y ejecutar el pago.
+La ejecución registra el movimiento financiero, actualiza el saldo de la cuenta
+y aplica el monto a las cuotas.
 
 Modelo activo: las seis tablas de `database/local/sql/01_schema.sql`.
 La migración `04_cuotas.sql` agrega dos tablas de cuotas y aplicaciones, sin
@@ -54,22 +55,25 @@ Todas las rutas siguientes tienen prefijo `/api/finanzas`:
 |---|---|---|---|
 | GET | `/salud` | Conexión PostgreSQL y modelo activo. | Activo |
 | GET | `/usuario` | Administrador mock actual. | Activo |
-| POST | `/cuentas-cobrar` | `id_venta`, `id_cliente`, `monto_total`, fechas opcionales. | Pendiente de implementar |
 | GET | `/cuentas-cobrar` | Lista; filtros `venta` y `estado`. | Activo |
 | GET | `/cuentas-cobrar/:id` | Cuenta por cobrar. | Activo |
-| POST | `/cuentas-pagar` | `id_oc`, `id_proveedor`, `monto_total`, fechas opcionales. | Pendiente de implementar |
 | GET | `/cuentas-pagar` | Lista; filtros `orden_compra` y `estado`. | Activo |
 | GET | `/cuentas-pagar/:id` | Cuenta por pagar. | Activo |
-| POST | `/pagos` | Solicitud pendiente, sin movimiento de caja. | Pendiente de implementar |
+| POST | `/pagos` | Crea una solicitud pendiente. | Activo |
 | GET | `/pagos` | Lista; filtros `estado` y `tipo_operacion`. | Activo |
 | GET | `/pagos/:id` | Pago con `autorizacion` y `movimiento` (o `null`). | Activo |
-| POST | `/pagos/:id/decision` | `decision`: `aprobada`/`rechazada`; `observacion` obligatoria al rechazar. | Pendiente de implementar |
-| POST | `/pagos/:id/ejecutar` | Cuerpo vacío `{}`; pago aprobado pasa a ejecutado. | Pendiente de implementar |
+| POST | `/pagos/:id/decision` | `decision`: `aprobada`/`rechazada`; `observacion` obligatoria al rechazar. | Activo |
+| POST | `/pagos/:id/ejecutar` | Cuerpo vacío `{}`; ejecuta el pago aprobado. | Activo |
 | GET | `/caja/saldo` | Saldo inicial y actual de la caja. | Activo |
 | GET | `/movimientos` | Movimientos efectivamente ejecutados. | Activo |
 
-Las reglas siguientes describen el **contrato objetivo** de los POST pendientes,
-no servicios de escritura activos. Las restricciones y funciones SQL se conservan.
+El flujo de pagos es: `POST /pagos` crea la solicitud; `POST /pagos/:id/decision`
+la aprueba o rechaza; `POST /pagos/:id/ejecutar` realiza la transacción. La ruta
+de decisión recibe `{"decision":"aprobada"}` o
+`{"decision":"rechazada","observacion":"Motivo"}`. La ejecución recibe `{}`.
+No existe una ruta `/pagos/:id/aprobar`: el endpoint activo es
+`/pagos/:id/decision`. La consulta activa usa `/cuentas-cobrar`, no
+`/cuentas-por-cobrar`.
 
 Crear cuenta debe inicializar saldo igual al monto y estado `pendiente`.
 `cantidad_cuotas` es opcional y vale 1; permite un entero entre 1 y 32767, siempre
@@ -93,8 +97,6 @@ Orígenes mutuamente excluyentes:
 - `reembolso`: solo `id_reembolso`.
 
 Métodos: `efectivo`, `transferencia`, `tarjeta`, `simulado`.
-La implementación pendiente debe llamar a las funciones SQL dentro de una
-transacción y validar también cuentas anuladas y caja inactiva.
 Una ejecución repetida devuelve 409 y no crea un movimiento adicional.
 Varias solicitudes sobre una misma deuda se validan de nuevo al ejecutar.
 
@@ -102,19 +104,15 @@ Errores: 400 entrada inválida o referencias incompatibles; 403 mock deshabilita
 o entorno no local; 404 registro inexistente; 409 referencia duplicada,
 estado incompatible o saldo insuficiente. Crear devuelve 201; decidir/ejecutar 200.
 
-## Validación y trabajo pendiente
-
-Las suites añadidas de API y frontend fueron retiradas del código activo. La
-implementación anterior quedó respaldada en
-`respaldo-reversion.local/implementacion-actual.zip` y los archivos independientes
-en `respaldo-reversion.local/retirados/`. Ese respaldo es local y está ignorado por Git.
+## Validación y alcance pendiente
 
 El frontend conserva la demostración original en localStorage; no consume esta
-API. El equipo debe implementar los POST con reglas confirmadas por pauta,
-conectar el formulario y crear sus propias pruebas E2E. Persisten como pendientes
-la alineación con maestros externos, las FK externas, los seeders de al menos diez
-registros donde corresponda y la comprobación de consulta para la demo.
+API. La conexión del frontend y la alineación con maestros externos y sus FK
+siguen fuera del alcance de este backend.
 
 La autenticación real, idempotencia de creación y unicidad de obligaciones de
-nómina/reembolso requieren definición posterior. No se modificó la base ni se
-borraron registros para esta reversión.
+nómina/reembolso requieren definición posterior.
+
+**Nota técnica:** la tabla `finanzas.cuenta_financiera` tiene la restricción
+`ck_caja_unica`, que limita la caja a `id_cuenta = 1`. No se pueden crear varias
+cuentas financieras sin cambiar esa restricción del esquema.
