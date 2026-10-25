@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { FinanceLayout, type FinancePage } from '../../shared/layout/FinanceLayout';
-import { initialCashMovements } from './cash.mock';
-import { createCashMovement, decideCashMovement, listCashMovements } from './cash.service';
+import { createCashMovement, decideCashMovement, listCashMovements } from './cash.api';
 import type {
   CashMovement,
   MovementDirection,
@@ -119,7 +118,7 @@ function MovementDetails({
 }
 
 function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) => void }) {
-  const [movements, setMovements] = useState<CashMovement[]>(initialCashMovements);
+  const [movements, setMovements] = useState<CashMovement[]>([]);
   const [loading, setLoading] = useState(true);
   const [storageError, setStorageError] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -147,20 +146,22 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
   const [manualAmount, setManualAmount] = useState('');
   const [manualErrors, setManualErrors] = useState<Record<string, string>>({});
 
-  const refresh = useCallback(() => {
+  const [saving, setSaving] = useState(false);
+
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setMovements(listCashMovements());
+      setMovements(await listCashMovements());
       setStorageError('');
     } catch (error) {
-      setStorageError(error instanceof Error ? error.message : 'No se pudieron cargar los movimientos demostrativos.');
+      setStorageError(error instanceof Error ? error.message : 'No se pudieron cargar los movimientos.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const periodMovements = useMemo(() => movements.filter((movement) =>
@@ -187,11 +188,6 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
   }, [directionFilter, fromDate, movements, originFilter, query, statusFilter, toDate]);
   const pendingMovements = filteredMovements.filter((item) => item.status === 'Pendiente');
 
-  function saveMovements(next: CashMovement[]) {
-    setMovements(next);
-    setStorageError('');
-  }
-
   function showMovement(movement: CashMovement) {
     setSelectedMovement(movement);
   }
@@ -208,39 +204,46 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
     setReasonError('');
   }
 
-  function confirmAuthorization() {
-    if (!authorizationCandidate) return;
+  async function confirmAuthorization() {
+    if (!authorizationCandidate || saving) return;
+    setSaving(true);
     try {
-      const next = decideCashMovement(authorizationCandidate.id, 'Autorizado', '', movements);
-      saveMovements(next);
-      setFeedback({ type: 'success', message: `Autorización simulada completada para ${authorizationCandidate.id}. No se ejecutó ni transfirió dinero.` });
+      await decideCashMovement(authorizationCandidate.id, 'Autorizado', '');
+      setFeedback({ type: 'success', message: `Pago ${authorizationCandidate.id} autorizado y ejecutado. La caja fue actualizada.` });
       setAuthorizationCandidate(null);
     } catch (error) {
-      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar la autorización demostrativa.' });
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar la autorización.' });
+    } finally {
+      await refresh(); // muestra el estado real, también si falló a mitad del flujo
+      setSaving(false);
     }
   }
 
-  function confirmRejection(event: FormEvent<HTMLFormElement>) {
+  async function confirmRejection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!rejectionCandidate) return;
+    if (!rejectionCandidate || saving) return;
     if (!rejectionReason.trim()) {
       setReasonError('Ingresa un motivo para rechazar esta solicitud.');
       return;
     }
+    setSaving(true);
     try {
-      const next = decideCashMovement(rejectionCandidate.id, 'Rechazado', rejectionReason, movements);
-      saveMovements(next);
-      setFeedback({ type: 'success', message: `Rechazo simulado registrado para ${rejectionCandidate.id}. No se modificaron datos reales.` });
+      await decideCashMovement(rejectionCandidate.id, 'Rechazado', rejectionReason);
+      setFeedback({ type: 'success', message: `Pago ${rejectionCandidate.id} rechazado. No se modificó la caja.` });
       setRejectionCandidate(null);
       setRejectionReason('');
       setReasonError('');
     } catch (error) {
-      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar el rechazo demostrativo.' });
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar el rechazo.' });
+    } finally {
+      await refresh();
+      setSaving(false);
     }
   }
 
-  function createManualRequest(event: FormEvent<HTMLFormElement>) {
+  async function createManualRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     setFeedback(null);
     const errors: Record<string, string> = {};
     if (!manualForm.reference.trim()) errors.reference = 'Ingresa la referencia de la operación.';
@@ -251,19 +254,22 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
     if (!manualForm.concept.trim()) errors.concept = 'Ingresa una descripción del movimiento.';
     setManualErrors(errors);
     if (Object.keys(errors).length) return;
+    setSaving(true);
     try {
-      const next = createCashMovement({ ...manualForm, amount: value }, movements);
-      saveMovements(next);
+      const created = await createCashMovement({ ...manualForm, amount: value });
+      await refresh();
       setManualForm((current) => ({ ...current, reference: '', beneficiary: '', amount: 0, requestDate: currentDate(), concept: '' }));
       setManualAmount('');
       setManualErrors({});
       setManualOpen(false);
-      setFeedback({ type: 'success', message: `Solicitud demostrativa ${next[0].id} creada con estado Pendiente. Debe revisarse antes de autorizarse.` });
+      setFeedback({ type: 'success', message: `Solicitud ${created.id} creada con estado Pendiente. Debe revisarse antes de autorizarse.` });
       setStatusFilter('Todos');
       setFromDate('');
       setToDate('');
     } catch (error) {
-      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo registrar la solicitud demostrativa.' });
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo registrar la solicitud.' });
+    } finally {
+      setSaving(false);
     }
   }
 
