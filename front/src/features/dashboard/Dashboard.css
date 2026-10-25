@@ -282,17 +282,6 @@
   color: #c72f31;
 }
 
-.net-summary {
-  min-height: 112px;
-  border-color: #efcaca;
-  background: linear-gradient(105deg, #fff7f5 0%, #fff 65%);
-}
-
-.net-summary::before {
-  height: 7px;
-  background: #f33435;
-}
-
 .chart-card {
   min-width: 0;
   min-height: 350px;
@@ -450,10 +439,6 @@
 
   .metric-card {
     min-height: 126px;
-  }
-
-  .net-summary {
-    min-height: 108px;
   }
 
   .chart-card {
@@ -635,8 +620,7 @@
     gap: 10px;
   }
 
-  .metric-card,
-  .net-summary {
+  .metric-card {
     min-height: 112px;
     padding: 12px 15px 12px 20px;
   }
