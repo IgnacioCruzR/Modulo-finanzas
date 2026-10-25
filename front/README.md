@@ -60,6 +60,17 @@ guardados en `localStorage` en esta versión. Autorizar o rechazar solo cambia e
 de la simulación; no ejecuta pagos, no actualiza saldos ni constituye autorización real.
 Las solicitudes manuales también se crean como pendientes demostrativas.
 
+## Registrar pago
+
+La pestaña «Registrar pago» (`src/features/payments/PaymentRequestPage.tsx`) es la
+maqueta del formulario transaccional para `POST /api/finanzas/pagos`. Valida en el
+cliente las mismas reglas de `CrearPagoDto` (tipo de operación y sus referencias
+excluyentes, monto positivo con hasta dos decimales y sin superar el saldo de la
+cuenta, método de pago y largo de la descripción); las reglas están en
+`paymentRequest.validation.ts`. Usa cuentas de ejemplo (`paymentRequest.mock.ts`) y
+todavía no envía la solicitud: para conectarla basta reemplazar
+`submitPaymentRequest` por la llamada a la API.
+
 El flujo de pagos anterior permanece en `src/features/payments/PaymentsPage.tsx` y
 conserva su servicio/API, pero no es la interfaz actualmente enlazada en la navegación.
 La gestión de caja todavía no consume endpoints.
