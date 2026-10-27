@@ -1,80 +1,70 @@
-
+-- Escenario de Tomas Guerra recuperado de bdf3acd y adaptado al modelo central.
+-- Conserva las ventas 5001-5010, montos totales, abonos, metodos y fechas relativas.
+-- Solo desarrollo local. Requiere 06_modelo_central.sql. No se carga automaticamente.
+-- Sin IDs forzados, nombres/RUT de terceros, cuotas ni cambios a operaciones existentes.
 BEGIN;
+SET LOCAL lock_timeout = '10s';
+SELECT pg_advisory_xact_lock(71007,1);
 
-INSERT INTO finanzas.cuenta_financiera (id_cuenta, nombre, saldo_inicial, moneda, activa)
-OVERRIDING SYSTEM VALUE
-VALUES (1, 'Caja general ERP', 10000000, 'CLP', TRUE)
-ON CONFLICT (id_cuenta) DO NOTHING;
+DO $$ BEGIN
+  IF current_database()<>'erp_local' THEN
+    RAISE EXCEPTION 'Este escenario solo se admite en la base local erp_local';
+  END IF;
+END $$;
 
-INSERT INTO finanzas.cuenta_cobrar
-  (id_cxc, id_venta, id_cliente, monto_total, saldo_pendiente, cantidad_cuotas,
-   fecha_emision, fecha_vencimiento, estado)
-OVERRIDING SYSTEM VALUE
-VALUES
-  (1, 5001, 101, 200000, 100000, 1, CURRENT_DATE - 30, CURRENT_DATE + 15, 'parcial'),
-  (2, 5002, 102, 240000, 120000, 1, CURRENT_DATE - 28, CURRENT_DATE + 17, 'parcial'),
-  (3, 5003, 103, 180000,  90000, 1, CURRENT_DATE - 26, CURRENT_DATE + 19, 'parcial'),
-  (4, 5004, 104, 320000, 160000, 1, CURRENT_DATE - 24, CURRENT_DATE + 21, 'parcial'),
-  (5, 5005, 105, 150000,  75000, 1, CURRENT_DATE - 22, CURRENT_DATE + 23, 'parcial'),
-  (6, 5006, 106, 275000, 125000, 1, CURRENT_DATE - 20, CURRENT_DATE + 25, 'parcial'),
-  (7, 5007, 107, 210000, 110000, 1, CURRENT_DATE - 18, CURRENT_DATE + 27, 'parcial'),
-  (8, 5008, 108, 190000,  95000, 1, CURRENT_DATE - 16, CURRENT_DATE + 29, 'parcial'),
-  (9, 5009, 109, 350000, 175000, 1, CURRENT_DATE - 14, CURRENT_DATE + 31, 'parcial'),
-  (10,5010, 110, 225000, 115000, 1, CURRENT_DATE - 12, CURRENT_DATE + 33, 'parcial');
+INSERT INTO finanzas.cuenta_financiera(id_cuenta,nombre,saldo_inicial,moneda,activa)
+OVERRIDING SYSTEM VALUE VALUES(1,'Caja general ERP',10000000,'CLP',TRUE)
+ON CONFLICT(id_cuenta) DO NOTHING;
 
-
-INSERT INTO finanzas.pago
-  (id_pago, id_cxc, tipo_operacion, monto, metodo_pago, estado,
-   fecha_solicitud, fecha_pago, descripcion)
-OVERRIDING SYSTEM VALUE
-VALUES
-  (1,  1, 'cobro', 100000, 'tarjeta',       'ejecutado', CURRENT_TIMESTAMP - INTERVAL '9 days', CURRENT_TIMESTAMP - INTERVAL '9 days', 'Matías Soto, RUT 12.345.678-5; Webpay'),
-  (2,  2, 'cobro', 120000, 'transferencia', 'ejecutado', CURRENT_TIMESTAMP - INTERVAL '8 days', CURRENT_TIMESTAMP - INTERVAL '8 days', 'Camila Rojas, RUT 17.654.321-3; Transferencia BancoEstado'),
-  (3,  3, 'cobro',  90000, 'tarjeta',       'ejecutado', CURRENT_TIMESTAMP - INTERVAL '7 days', CURRENT_TIMESTAMP - INTERVAL '7 days', 'Diego Muñoz, RUT 9.876.543-3; Tarjeta MACH'),
-  (4,  4, 'cobro', 160000, 'transferencia', 'ejecutado', CURRENT_TIMESTAMP - INTERVAL '6 days', CURRENT_TIMESTAMP - INTERVAL '6 days', 'Valentina Pérez, RUT 15.432.109-8; Transferencia BancoEstado'),
-  (5,  5, 'cobro',  75000, 'tarjeta',       'ejecutado', CURRENT_TIMESTAMP - INTERVAL '5 days', CURRENT_TIMESTAMP - INTERVAL '5 days', 'Benjamín González, RUT 20.345.678-6; Webpay'),
-  (6,  6, 'cobro', 150000, 'transferencia', 'ejecutado', CURRENT_TIMESTAMP - INTERVAL '4 days', CURRENT_TIMESTAMP - INTERVAL '4 days', 'Antonia Fernández, RUT 11.222.333-9; Transferencia BancoEstado'),
-  (7,  7, 'cobro', 100000, 'tarjeta',       'ejecutado', CURRENT_TIMESTAMP - INTERVAL '3 days', CURRENT_TIMESTAMP - INTERVAL '3 days', 'Joaquín Silva, RUT 19.876.543-0; Tarjeta MACH'),
-  (8,  8, 'cobro',  95000, 'transferencia', 'ejecutado', CURRENT_TIMESTAMP - INTERVAL '2 days', CURRENT_TIMESTAMP - INTERVAL '2 days', 'Florencia Torres, RUT 14.567.890-0; Transferencia BancoEstado'),
-  (9,  9, 'cobro', 175000, 'tarjeta',       'ejecutado', CURRENT_TIMESTAMP - INTERVAL '1 day', CURRENT_TIMESTAMP - INTERVAL '1 day', 'Vicente Ramírez, RUT 16.789.012-1; Webpay'),
-  (10,10, 'cobro', 110000, 'transferencia', 'ejecutado', CURRENT_TIMESTAMP - INTERVAL '12 hours', CURRENT_TIMESTAMP - INTERVAL '12 hours', 'Javiera Contreras, RUT 10.234.567-3; Transferencia BancoEstado');
-
-INSERT INTO finanzas.movimiento_financiero
-  (id_mov_fin, id_pago, id_cuenta, tipo_flujo, monto, fecha_movimiento, descripcion)
-OVERRIDING SYSTEM VALUE
-VALUES
-  (1,  1, 1, 'ingreso', 100000, CURRENT_TIMESTAMP - INTERVAL '9 days', 'Abono Webpay - Matías Soto'),
-  (2,  2, 1, 'ingreso', 120000, CURRENT_TIMESTAMP - INTERVAL '8 days', 'Transferencia BancoEstado - Camila Rojas'),
-  (3,  3, 1, 'ingreso',  90000, CURRENT_TIMESTAMP - INTERVAL '7 days', 'Tarjeta MACH - Diego Muñoz'),
-  (4,  4, 1, 'ingreso', 160000, CURRENT_TIMESTAMP - INTERVAL '6 days', 'Transferencia BancoEstado - Valentina Pérez'),
-  (5,  5, 1, 'ingreso',  75000, CURRENT_TIMESTAMP - INTERVAL '5 days', 'Webpay - Benjamín González'),
-  (6,  6, 1, 'ingreso', 150000, CURRENT_TIMESTAMP - INTERVAL '4 days', 'Transferencia BancoEstado - Antonia Fernández'),
-  (7,  7, 1, 'ingreso', 100000, CURRENT_TIMESTAMP - INTERVAL '3 days', 'Tarjeta MACH - Joaquín Silva'),
-  (8,  8, 1, 'ingreso',  95000, CURRENT_TIMESTAMP - INTERVAL '2 days', 'Transferencia BancoEstado - Florencia Torres'),
-  (9,  9, 1, 'ingreso', 175000, CURRENT_TIMESTAMP - INTERVAL '1 day', 'Webpay - Vicente Ramírez'),
-  (10,10, 1, 'ingreso', 110000, CURRENT_TIMESTAMP - INTERVAL '12 hours', 'Transferencia BancoEstado - Javiera Contreras');
-
-INSERT INTO finanzas.aplicacion_pago_cuota
-  (id_aplicacion, id_pago, id_cuota, monto_aplicado)
-OVERRIDING SYSTEM VALUE
-VALUES
-  (1,  1,  1, 100000),
-  (2,  2,  2, 120000),
-  (3,  3,  3,  90000),
-  (4,  4,  4, 160000),
-  (5,  5,  5,  75000),
-  (6,  6,  6, 150000),
-  (7,  7,  7, 100000),
-  (8,  8,  8,  95000),
-  (9,  9,  9, 175000),
-  (10,10, 10, 110000);
-
-
-SELECT setval(pg_get_serial_sequence('finanzas.cuenta_financiera', 'id_cuenta'), (SELECT MAX(id_cuenta) FROM finanzas.cuenta_financiera), TRUE);
-SELECT setval(pg_get_serial_sequence('finanzas.cuenta_cobrar', 'id_cxc'), (SELECT MAX(id_cxc) FROM finanzas.cuenta_cobrar), TRUE);
-SELECT setval(pg_get_serial_sequence('finanzas.pago', 'id_pago'), (SELECT MAX(id_pago) FROM finanzas.pago), TRUE);
-SELECT setval(pg_get_serial_sequence('finanzas.movimiento_financiero', 'id_mov_fin'), (SELECT MAX(id_mov_fin) FROM finanzas.movimiento_financiero), TRUE);
-SELECT setval(pg_get_serial_sequence('finanzas.cuota', 'id_cuota'), (SELECT MAX(id_cuota) FROM finanzas.cuota), TRUE);
-SELECT setval(pg_get_serial_sequence('finanzas.aplicacion_pago_cuota', 'id_aplicacion'), (SELECT MAX(id_aplicacion) FROM finanzas.aplicacion_pago_cuota), TRUE);
-
+DO $$
+DECLARE d RECORD; v_cxc BIGINT; v_operacion BIGINT; v_total NUMERIC; v_coincidencias INTEGER;
+BEGIN
+  FOR d IN SELECT * FROM (VALUES
+    (5001,200000,100000,'tarjeta',       30,15,INTERVAL '9 days'),
+    (5002,240000,120000,'transferencia', 28,17,INTERVAL '8 days'),
+    (5003,180000, 90000,'tarjeta',       26,19,INTERVAL '7 days'),
+    (5004,320000,160000,'transferencia', 24,21,INTERVAL '6 days'),
+    (5005,150000, 75000,'tarjeta',       22,23,INTERVAL '5 days'),
+    (5006,275000,150000,'transferencia', 20,25,INTERVAL '4 days'),
+    (5007,210000,100000,'tarjeta',       18,27,INTERVAL '3 days'),
+    (5008,190000, 95000,'transferencia', 16,29,INTERVAL '2 days'),
+    (5009,350000,175000,'tarjeta',       14,31,INTERVAL '1 day'),
+    (5010,225000,110000,'transferencia', 12,33,INTERVAL '12 hours')
+  ) AS datos(venta,total,abono,metodo,dias_emision,dias_vencimiento,antiguedad)
+  LOOP
+    INSERT INTO finanzas.cuenta_cobrar(id_venta,monto_total,saldo_pendiente,fecha_emision,fecha_vencimiento)
+      VALUES(d.venta,d.total,d.total,CURRENT_DATE-d.dias_emision,CURRENT_DATE+d.dias_vencimiento)
+      ON CONFLICT(id_venta) DO NOTHING RETURNING id_cxc INTO v_cxc;
+    IF v_cxc IS NOT NULL THEN
+      INSERT INTO finanzas.operacion_financiera(id_cxc,monto,metodo_pago,fecha_solicitud,descripcion)
+        VALUES(v_cxc,d.abono,d.metodo,NOW()-d.antiguedad,'Abono de prueba a venta '||d.venta)
+        RETURNING id_operacion INTO v_operacion;
+      -- Crea autorizacion, movimiento y saldo mediante el flujo real. No se falsifican
+      -- estados finales ni se desactivan triggers. La ejecucion queda fechada ahora.
+      PERFORM finanzas.decidir_operacion(v_operacion,1,TRUE);
+    ELSE
+      SELECT id_cxc,monto_total INTO v_cxc,v_total FROM finanzas.cuenta_cobrar WHERE id_venta=d.venta;
+      SELECT COUNT(*) INTO v_coincidencias FROM finanzas.operacion_financiera o
+        JOIN finanzas.autorizacion_financiera a USING(id_operacion)
+        JOIN finanzas.movimiento_financiero m USING(id_operacion)
+        WHERE o.id_cxc=v_cxc AND o.estado='ejecutada' AND o.monto=d.abono
+          AND o.metodo_pago=d.metodo AND o.descripcion='Abono de prueba a venta '||d.venta
+          AND a.decision='aprobada' AND m.tipo_flujo='ingreso' AND m.monto=d.abono;
+      IF v_total<>d.total OR v_coincidencias<>1 THEN
+        RAISE EXCEPTION 'La venta % ya existe y no coincide con este escenario; se revierte toda la carga',d.venta;
+      END IF;
+      -- Repeticion compatible: no reinicia el saldo ni crea otro abono, incluso si
+      -- posteriormente se registraron pagos adicionales sobre esta cuenta.
+    END IF;
+  END LOOP;
+END $$;
 COMMIT;
+
+-- Vista de consulta de las diez operaciones recuperadas; no depende de IDs internos.
+SELECT c.id_venta,c.id_cxc,c.monto_total,c.saldo_pendiente,c.estado AS estado_cuenta,
+       o.id_operacion,o.monto AS abono,o.metodo_pago,o.estado AS estado_operacion
+FROM finanzas.cuenta_cobrar c
+JOIN finanzas.operacion_financiera o USING(id_cxc)
+WHERE c.id_venta BETWEEN 5001 AND 5010
+  AND o.descripcion='Abono de prueba a venta '||c.id_venta
+ORDER BY c.id_venta;

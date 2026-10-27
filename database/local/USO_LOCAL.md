@@ -1,99 +1,77 @@
-# Base local del módulo Finanzas
-
-La configuración activa para esta base es `compose.yaml` en la raíz del repositorio.
-Ejecutar los comandos desde esa raíz. El Compose anterior de `back/` corresponde
-al modelo anterior y no debe utilizarse para inicializar esta base.
+# Uso local
+Usar compose.yaml de la raíz. El Compose de back/ pertenece al modelo anterior.
 
 ## Arranque
-
-Se requiere Docker Desktop con contenedores Linux. Copiar `.env.example` a `.env`
-si no existe y definir una contraseña local; usar el mismo valor en
-`POSTGRES_PASSWORD` y `DB_PASSWORD`. No versionar `.env`.
-
-```powershell
-docker compose up -d --wait
-docker compose ps
-```
-
-Conexión desde DBeaver o una aplicación ejecutada en el equipo:
-
-- Host: `localhost`
-- Puerto: `15433`
-- Base: `erp_local`
-- Usuario: `erp_user`
-- Contraseña: `POSTGRES_PASSWORD` del archivo `.env`
-- Esquema: `finanzas`
-- SSL local: desactivado
-
-El mismo Compose levanta el frontend en **http://localhost:8080** y la API en
-`http://localhost:3000/api/finanzas`.
-La API conserva solo consultas GET y el usuario mock Administrador 1. Los DTO y
-payloads siguen como contrato para implementar las escrituras. El frontend volvió
-a la demostración original del equipo y no modifica PostgreSQL. Se conservaron
-todas las tablas, cuotas, aplicaciones, funciones y datos.
-
-## Reconstruir frontend y backend
-
-En una red con certificados habituales:
+Docker Desktop con contenedores Linux. Copiar .env.example a .env y configurar
+POSTGRES_PASSWORD y DB_PASSWORD con la misma contraseña. No versionar .env.
 
 ```powershell
 docker compose up -d --build --wait
 ```
 
-En este equipo la descarga npm requiere la CA pública de confianza de Windows,
-guardada en `.npm-ca.local` (ignorada por Git). Se entrega a la compilación
-mediante secreto BuildKit; no se copia a las imágenes ni se desactiva TLS:
-
+Si npm necesita la CA pública local del equipo:
 ```powershell
 docker compose -f compose.yaml -f compose.ca.yaml build
 docker compose up -d --no-build --wait
 ```
+.npm-ca.local no se versiona ni se incluye en las imágenes.
 
-Los tres servicios solo publican puertos en localhost. El frontend utiliza
-`/api/finanzas` y Nginx reenvía la petición a `api:3000` dentro de Docker.
-No se configuran credenciales PostgreSQL en React.
+Frontend http://localhost:8080; API http://localhost:3000/api/finanzas.
+PostgreSQL localhost:15433, base erp_local, esquema finanzas, usuario erp_user,
+contraseña POSTGRES_PASSWORD de .env. Dentro de Docker: postgres:5432.
+Todo publicado solo en localhost; la base del profesor no está conectada.
 
-## Estado de la reversión parcial
+## Actualizar una base existente
+Respaldar antes y detener clientes que escriben. No borrar el volumen.
+```powershell
+docker compose stop api frontend
+docker compose exec -T postgres pg_dump -U erp_user -d erp_local -Fc -f /tmp/antes-central.dump
+New-Item -ItemType Directory -Force database/backups
+docker compose cp postgres:/tmp/antes-central.dump database/backups/antes-central.dump
+Get-Content -Raw database/local/sql/06_modelo_central.sql | docker compose exec -T postgres psql -U erp_user -d erp_local -v ON_ERROR_STOP=1
+```
+Revisar el código de salida de psql: si falla no iniciar la API nueva.
+Reconstruir e iniciar los tres servicios cuando la migración haya confirmado.
+No repetir 06 sobre una base ya migrada. Detalles y bloqueos en
+[MODELO_CENTRAL.md](../../docs/MODELO_CENTRAL.md).
 
-Se retiraron el formulario conectado, los POST del modelo v2 y las suites
-automatizadas añadidas. La implementación completa previa está en
-`respaldo-reversion.local/implementacion-actual.zip`; no contiene credenciales.
-El código original de los compañeros se mantiene.
+Una instalación nueva aplica 01, 02, 04 y 06 automáticamente; termina con seis
+tablas. Los scripts anteriores son historial y no deben reaplicarse después.
 
-Los endpoints GET pueden consultarse por el puerto 8080 bajo /api/finanzas.
-Las tareas transaccionales y E2E quedan para el equipo; no hay una suite activa
-de pagos en este estado. El escenario SQL opcional del ZIP se conserva como
-parte de la base local, no como seeder alineado con maestros ni prueba E2E.
+## Datos de desarrollo
+```powershell
+Get-Content -Raw database/local/sql/07_seeders.sql | docker compose exec -T postgres psql -U erp_user -d erp_local -v ON_ERROR_STOP=1
+```
+No se ejecutan automáticamente. Crea 12 cuentas de cada tipo y, en una instalación
+vacía, 24 operaciones, 20 autorizaciones y 16 movimientos. Es repetible: omite
+orígenes ya existentes, no reinicia la caja ni duplica operaciones.
+La caja tiene una fila por diseño; los IDs externos son fixtures, no maestros reales.
+03_pruebas.sql conserva el mismo escenario general que 07_seeders.sql.
 
-## Inicialización y persistencia
-
-Se cargan `sql/01_schema.sql`, `sql/02_operaciones.sql` y `sql/04_cuotas.sql`
-únicamente al crear un volumen vacío. El modelo base tiene seis tablas y la
-ampliación de cuotas agrega dos tablas más. Incluyen funciones, vistas y una caja
-inicial de 10.000.000 CLP. `sql/03_pruebas.sql` no se carga automáticamente.
-Ver [CUOTAS.md](CUOTAS.md) para la recepción de total/cantidad y los abonos.
-No se aplican las migraciones del modelo anterior.
+## Diez registros originales de Tomas
+seeders_finanzas.sql, en la raiz, recupera su escenario del commit bdf3acd:
+ventas 5001-5010, diez cuentas por cobrar, diez operaciones ejecutadas, diez
+autorizaciones y diez movimientos de ingreso. Conserva los totales, abonos y
+metodos originales; no fuerza IDs ni utiliza cuotas o datos personales.
 
 ```powershell
+Get-Content -Raw seeders_finanzas.sql | docker compose exec -T postgres psql -U erp_user -d erp_local -v ON_ERROR_STOP=1
+```
+
+Solo cargar en desarrollo local, despues de 06. No se ejecuta automaticamente.
+Al cargarlo por primera vez aumenta la caja en 1.175.000 CLP; no reinicia su saldo
+inicial. Al repetirlo verifica que las ventas existentes correspondan al escenario
+y no crea otro abono. Si encuentra un origen incompatible revierte toda la carga.
+Las fechas de solicitud conservan la antiguedad relativa original. La autorizacion
+y ejecucion se registran en el momento real de carga, sin alterar historicos.
+El script termina mostrando las diez operaciones. En la interfaz, limpiar los
+filtros de fecha si alguna solicitud pertenece al mes anterior.
+
+## Comprobación
+```powershell
+docker compose ps
 docker compose exec -T postgres psql -U erp_user -d erp_local -c "SELECT * FROM finanzas.v_saldo_caja;"
-docker compose stop
-docker compose start
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ModeloCentral.ps1
 ```
-
-El volumen `finanzas-local_pg_finanzas_v2` conserva los datos al detener o recrear
-el contenedor. No utilizar `docker compose down -v` para la operación habitual:
-elimina los datos. Cambios posteriores de SQL requieren migraciones revisadas.
-
-## Escenario opcional de demostración
-
-Solo en una base recién inicializada y una única vez; modifica datos locales.
-En PowerShell:
-
-```powershell
-Get-Content -Raw database/local/sql/03_pruebas.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U erp_user -d erp_local
-```
-
-Los archivos `README.md`, `sql/` y `json/` de esta carpeta proceden del ZIP
-`erp_finanzas_v2_docker.zip`; las instrucciones de rutas del README original
-corresponden al paquete original. Para este repositorio utilizar este documento.
-Esta configuración no se conecta a la base compartida del profesor.
+Las pruebas crean y eliminan sus propios contenedores efímeros; no usan el volumen.
+El volumen finanzas-local_pg_finanzas_v2 conserva datos. No usar down -v.
