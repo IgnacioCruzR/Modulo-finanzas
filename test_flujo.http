@@ -1,16 +1,19 @@
 @baseUrl = http://localhost:3000/api/finanzas
 
-GET {{baseUrl}}/cuentas-cobrar
-Accept: application/json
+### Obligaciones de compra
+GET {{baseUrl}}/cuentas-pagar
 
-POST {{baseUrl}}/pagos
+### Solicitar operación contra una cuenta con saldo (ajustar id_cxp)
+POST {{baseUrl}}/operaciones
 Content-Type: application/json
-Accept: application/json
 
-{
-  "tipo_operacion": "cobro",
-  "id_cxc": 1,
-  "monto": 10000,
-  "metodo_pago": "transferencia",
-  "descripcion": "QA - Transferencia BancoEstado de Matías Soto (RUT 12.345.678-5)"
-}
+{"id_cxp":1,"monto":1000,"metodo_pago":"transferencia","descripcion":"Abono a orden de compra"}
+
+### Aprobar y ejecutar en una transacción (ajustar ID)
+POST {{baseUrl}}/operaciones/25/decision
+Content-Type: application/json
+
+{"decision":"aprobada"}
+
+### Saldo y movimientos
+GET {{baseUrl}}/caja/saldo

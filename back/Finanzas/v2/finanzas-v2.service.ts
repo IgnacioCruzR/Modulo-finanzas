@@ -1,210 +1,137 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
-import { CrearPagoDto, DecisionPagoDto, FiltrosCuentaDto, FiltrosPagoDto } from './finanzas-v2.dto';
-
+import { CrearCuentaCobrarDto, CrearCuentaPagarDto, CrearOperacionDto, DecisionOperacionDto, FiltrosCuentaDto, FiltrosOperacionDto } from './finanzas-v2.dto';
+import { IntegracionExternaService } from './integracion-externa.service';
 type TipoCuenta = 'cobrar' | 'pagar';
 const CUENTAS = {
-  cobrar: { tabla: 'finanzas.cuenta_cobrar', pk: 'id_cxc', origen: 'id_venta', tercero: 'id_cliente' },
-  pagar: { tabla: 'finanzas.cuenta_pagar', pk: 'id_cxp', origen: 'id_oc', tercero: 'id_proveedor' },
+  cobrar: { tabla: 'finanzas.cuenta_cobrar', pk: 'id_cxc', origen: 'id_venta' },
+  pagar: { tabla: 'finanzas.cuenta_pagar', pk: 'id_cxp', origen: 'id_oc' },
 } as const;
-
-interface PagoFila {
-  id_pago: string;
-  id_cxc: string | null;
-  id_cxp: string | null;
-  tipo_operacion: CrearPagoDto['tipo_operacion'];
-  monto: string;
-  estado: string;
+interface OperacionFila {
+  id_operacion: string; id_cxc: string | null; id_cxp: string | null; id_reembolso: string | null;
+  monto: string; metodo_pago: string | null; estado: string;
 }
-
 @Injectable()
 export class FinanzasV2Service {
   private readonly logger = new Logger(FinanzasV2Service.name);
-  constructor(private readonly db: DataSource) {}
-
+  constructor(private readonly db: DataSource, private readonly externos: IntegracionExternaService) {}
   private async operation<T>(action: () => Promise<T>): Promise<T> {
     try { return await action(); } catch (error: unknown) {
       if (error instanceof HttpException) throw error;
       const pg = error as { code?: string; message?: string; driverError?: { code?: string; message?: string } };
       const code = pg.driverError?.code ?? pg.code;
       if (code === '23505') throw new ConflictException('Ya existe un registro con esa referencia.');
-      if (code === '23503') throw new BadRequestException('La cuenta o el pago relacionado no existe.');
-      if (['23514', '23502', '22003', '22007', '22008', '22P02'].includes(code ?? '')) {
-        throw new BadRequestException('Los datos no cumplen las restricciones de la base.');
-      }
+      if (code === '23503') throw new BadRequestException('La referencia interna no existe.');
+      if (['23514', '23502', '22003', '22007', '22008', '22P02'].includes(code ?? '')) throw new BadRequestException('Los datos no cumplen las restricciones de la base.');
       if (code === 'P0001') throw new ConflictException(pg.driverError?.message ?? pg.message ?? 'Operación no permitida.');
-      this.logger.error(`Error de base de datos (${code ?? 'sin código'}).`);
+      this.logger.error('Error de base de datos (' + (code ?? 'sin código') + ').');
       throw new InternalServerErrorException('No se pudo completar la operación.');
     }
   }
-
   health() {
     return this.operation(async () => {
-      await this.db.query('SELECT 1');
-      return { estado: 'ok', modelo: 'finanzas-v2', autenticacion: 'mock-local', modo: 'solo-consulta' };
+      // Falla también si solo se aplicó el esquema anterior.
+      await this.db.query('SELECT id_operacion FROM finanzas.operacion_financiera LIMIT 0');
+      return { estado: 'ok', modelo: 'finanzas-central', autenticacion: 'mock-local', integracion: this.externos.modo, modo: 'transaccional' };
     });
   }
-
   listarCuentas(tipo: TipoCuenta, filtros: FiltrosCuentaDto) {
     const c = CUENTAS[tipo];
-    if ((tipo === 'cobrar' && filtros.orden_compra !== undefined) || (tipo === 'pagar' && filtros.venta !== undefined)) {
-      throw new BadRequestException('El filtro no corresponde a este tipo de cuenta.');
-    }
+    if ((tipo === 'cobrar' && filtros.orden_compra !== undefined) || (tipo === 'pagar' && filtros.venta !== undefined)) throw new BadRequestException('El filtro no corresponde a este tipo de cuenta.');
     return this.operation(() => this.db.query(
-      `SELECT *,fecha_emision::text AS fecha_emision,fecha_vencimiento::text AS fecha_vencimiento FROM ${c.tabla} WHERE ($1::text IS NULL OR estado=$1)
-       AND ($2::bigint IS NULL OR ${c.origen}=$2) ORDER BY ${c.pk} DESC`,
-      [filtros.estado ?? null, (tipo === 'cobrar' ? filtros.venta : filtros.orden_compra) ?? null],
-    ));
+      `SELECT *,fecha_emision::text AS fecha_emision,fecha_vencimiento::text AS fecha_vencimiento FROM ${c.tabla}
+       WHERE ($1::text IS NULL OR estado=$1) AND ($2::bigint IS NULL OR ${c.origen}=$2) ORDER BY ${c.pk} DESC`,
+      [filtros.estado ?? null, (tipo === 'cobrar' ? filtros.venta : filtros.orden_compra) ?? null]));
   }
-
   obtenerCuenta(tipo: TipoCuenta, id: string) {
-    const c = CUENTAS[tipo];
-    return this.operation(() => this.db.transaction('REPEATABLE READ', async (m) => {
-      const [cuenta] = await m.query(`SELECT *,fecha_emision::text AS fecha_emision,fecha_vencimiento::text AS fecha_vencimiento FROM ${c.tabla} WHERE ${c.pk}=$1`, [id]);
+    return this.operation(async () => {
+      const c = CUENTAS[tipo];
+      const [cuenta] = await this.db.query(`SELECT *,fecha_emision::text AS fecha_emision,fecha_vencimiento::text AS fecha_vencimiento FROM ${c.tabla} WHERE ${c.pk}=$1`, [id]);
       if (!cuenta) throw new NotFoundException('Cuenta no encontrada.');
-      const cuotas = await m.query(`SELECT * FROM finanzas.v_cuotas WHERE ${c.pk}=$1 ORDER BY numero`, [id]);
-      return { ...cuenta, cuotas };
-    }));
+      return cuenta;
+    });
   }
-
-  listarPagos(f: FiltrosPagoDto) {
+  crearCuenta(tipo: TipoCuenta, d: CrearCuentaCobrarDto | CrearCuentaPagarDto) {
+    return this.operation(async () => {
+      const c = CUENTAS[tipo];
+      const id = tipo === 'cobrar' ? (d as CrearCuentaCobrarDto).id_venta : (d as CrearCuentaPagarDto).id_oc;
+      await this.externos.validar(tipo === 'cobrar' ? 'venta' : 'orden_compra', id);
+      const [{ valido }] = await this.db.query('SELECT $2::date IS NULL OR $2::date>=COALESCE($1::date,CURRENT_DATE) AS valido', [d.fecha_emision ?? null, d.fecha_vencimiento ?? null]);
+      if (!valido) throw new BadRequestException('El vencimiento no puede ser anterior a la emisión.');
+      const [cuenta] = await this.db.query(
+        `INSERT INTO ${c.tabla}(${c.origen},monto_total,saldo_pendiente,fecha_emision,fecha_vencimiento)
+         VALUES($1,$2,$2,COALESCE($3::date,CURRENT_DATE),$4::date) RETURNING *`,
+        [id, d.monto_total.toFixed(2), d.fecha_emision ?? null, d.fecha_vencimiento ?? null]);
+      return cuenta;
+    });
+  }
+  listarOperaciones(f: FiltrosOperacionDto) {
     return this.operation(() => this.db.query(
-      `SELECT * FROM finanzas.pago WHERE ($1::text IS NULL OR estado=$1)
-       AND ($2::text IS NULL OR tipo_operacion=$2) ORDER BY id_pago DESC`,
-      [f.estado ?? null, f.tipo_operacion ?? null],
-    ));
+      `SELECT * FROM finanzas.operacion_financiera WHERE ($1::text IS NULL OR estado=$1)
+       AND ($2::text IS NULL OR CASE WHEN id_cxc IS NOT NULL THEN 'cobro' WHEN id_cxp IS NOT NULL THEN 'proveedor' ELSE 'reembolso' END=$2)
+       ORDER BY id_operacion DESC`, [f.estado ?? null, f.origen ?? null]));
   }
-
-  private async detallePago(m: EntityManager, id: string) {
-    const [pago] = await m.query('SELECT * FROM finanzas.pago WHERE id_pago=$1', [id]);
-    if (!pago) throw new NotFoundException('Pago no encontrado.');
-    const [autorizacion] = await m.query('SELECT * FROM finanzas.autorizacion_pago WHERE id_pago=$1', [id]);
-    const [movimiento] = await m.query('SELECT * FROM finanzas.movimiento_financiero WHERE id_pago=$1', [id]);
-    const aplicaciones = await m.query(
-      `SELECT a.id_aplicacion,a.id_cuota,c.numero,a.monto_aplicado
-       FROM finanzas.aplicacion_pago_cuota a JOIN finanzas.cuota c ON c.id_cuota=a.id_cuota
-       WHERE a.id_pago=$1 ORDER BY c.numero`, [id],
-    );
-    return { ...pago, autorizacion: autorizacion ?? null, movimiento: movimiento ?? null, aplicaciones };
+  private async detalle(m: EntityManager, id: string) {
+    const [o] = await m.query('SELECT * FROM finanzas.operacion_financiera WHERE id_operacion=$1', [id]);
+    if (!o) throw new NotFoundException('Operación no encontrada.');
+    const [autorizacion] = await m.query('SELECT * FROM finanzas.autorizacion_financiera WHERE id_operacion=$1', [id]);
+    const [movimiento] = await m.query('SELECT * FROM finanzas.movimiento_financiero WHERE id_operacion=$1', [id]);
+    return { ...o, autorizacion: autorizacion ?? null, movimiento: movimiento ?? null };
   }
-
-  obtenerPago(id: string) {
-    return this.operation(() => this.db.transaction('REPEATABLE READ', (m) => this.detallePago(m, id)));
+  obtenerOperacion(id: string) {
+    return this.operation(() => this.db.transaction('REPEATABLE READ', m => this.detalle(m, id)));
   }
-
-  /** Validaciones */
-
-  /** Cada tipo_operacion exige exactamente sus referencias de origen y rechaza las demás. */
-  private validarOrigen(d: CrearPagoDto) {
-    const requeridos: Record<CrearPagoDto['tipo_operacion'], (keyof CrearPagoDto)[]> = {
-      cobro: ['id_cxc'],
-      proveedor: ['id_cxp'],
-      nomina: ['id_nomina', 'id_empleado'],
-      reembolso: ['id_reembolso'],
-    };
-    const referencias = ['id_cxc', 'id_cxp', 'id_nomina', 'id_empleado', 'id_reembolso'] as const;
-    const esperados = requeridos[d.tipo_operacion];
-    const faltan = esperados.filter((c) => d[c] === undefined);
-    if (faltan.length) {
-      throw new BadRequestException(`Un pago de tipo "${d.tipo_operacion}" requiere: ${faltan.join(', ')}.`);
-    }
-    const sobran = referencias.filter((c) => d[c] !== undefined && !esperados.includes(c));
-    if (sobran.length) {
-      throw new BadRequestException(`Un pago de tipo "${d.tipo_operacion}" no admite: ${sobran.join(', ')}.`);
-    }
-  }
-
-  /** La caja debe existir y estar activa para registrar, aprobar o ejecutar cualquier operación. */
-  private async validarCajaActiva(m: EntityManager) {
-    const [caja] = await m.query('SELECT activa FROM finanzas.cuenta_financiera WHERE id_cuenta=1');
-    if (!caja) throw new NotFoundException('Caja no encontrada.');
-    if (!caja.activa) throw new ConflictException('La caja está inactiva; no se pueden registrar operaciones.');
-  }
-
-  /** Bloquea la cuenta y valida: existe, no está anulada ni pagada y el monto no supera su saldo. */
-  private async validarCuentaConSaldo(m: EntityManager, tipo: TipoCuenta, id: string | number, monto: string) {
+  private async validarOrigenExterno(o: Pick<OperacionFila, 'id_cxc' | 'id_cxp' | 'id_reembolso'>) {
+    if (o.id_reembolso != null) return this.externos.validar('reembolso', o.id_reembolso);
+    const tipo: TipoCuenta = o.id_cxc != null ? 'cobrar' : 'pagar';
     const c = CUENTAS[tipo];
-    const etiqueta = tipo === 'cobrar' ? 'cuenta por cobrar' : 'cuenta por pagar';
-    const [cuenta] = await m.query(
-      `SELECT estado, saldo_pendiente::text AS saldo_pendiente, ($2::numeric > saldo_pendiente) AS excede
-       FROM ${c.tabla} WHERE ${c.pk}=$1 FOR UPDATE`,
-      [id, monto],
-    );
-    if (!cuenta) throw new NotFoundException(`La ${etiqueta} no existe.`);
-    if (cuenta.estado === 'anulada') throw new ConflictException(`La ${etiqueta} está anulada.`);
-    if (cuenta.estado === 'pagada') throw new ConflictException(`La ${etiqueta} ya está pagada; no tiene saldo pendiente.`);
-    if (cuenta.excede) {
-      throw new ConflictException(`El monto supera el saldo pendiente de la ${etiqueta} (saldo: ${cuenta.saldo_pendiente}).`);
-    }
+    const [cuenta] = await this.db.query(`SELECT ${c.origen} AS origen FROM ${c.tabla} WHERE ${c.pk}=$1`, [o.id_cxc ?? o.id_cxp]);
+    if (!cuenta) throw new NotFoundException('Obligación no encontrada.');
+    await this.externos.validar(tipo === 'cobrar' ? 'venta' : 'orden_compra', cuenta.origen);
   }
-
-  private async validarCuentaDelPago(m: EntityManager, pago: PagoFila) {
-    if (pago.tipo_operacion === 'cobro') return this.validarCuentaConSaldo(m, 'cobrar', pago.id_cxc as string, pago.monto);
-    if (pago.tipo_operacion === 'proveedor') return this.validarCuentaConSaldo(m, 'pagar', pago.id_cxp as string, pago.monto);
+  private async validarObligacion(m: EntityManager, o: Pick<OperacionFila, 'id_cxc' | 'id_cxp' | 'monto'>) {
+    if (o.id_cxc == null && o.id_cxp == null) return;
+    const c = CUENTAS[o.id_cxc != null ? 'cobrar' : 'pagar'];
+    const [cuenta] = await m.query(`SELECT estado,($2::numeric>saldo_pendiente) AS excede FROM ${c.tabla} WHERE ${c.pk}=$1 FOR UPDATE`, [o.id_cxc ?? o.id_cxp, o.monto]);
+    if (!cuenta) throw new NotFoundException('Obligación no encontrada.');
+    if (cuenta.estado === 'anulada' || cuenta.estado === 'pagada' || cuenta.excede) throw new ConflictException('La obligación no admite este importe o no tiene saldo pendiente.');
   }
-
-  private async pagoBloqueado(m: EntityManager, id: string): Promise<PagoFila> {
-    const [pago] = await m.query('SELECT * FROM finanzas.pago WHERE id_pago=$1 FOR UPDATE', [id]);
-    if (!pago) throw new NotFoundException('Pago no encontrado.');
-    return pago;
+  crearOperacion(d: CrearOperacionDto) {
+    if ([d.id_cxc, d.id_cxp, d.id_reembolso].filter(v => v != null).length !== 1) throw new BadRequestException('Indica exactamente un origen: id_cxc, id_cxp o id_reembolso.');
+    const o = { id_cxc: d.id_cxc == null ? null : String(d.id_cxc), id_cxp: d.id_cxp == null ? null : String(d.id_cxp), id_reembolso: d.id_reembolso == null ? null : String(d.id_reembolso), monto: d.monto.toFixed(2) };
+    return this.operation(async () => {
+      await this.validarOrigenExterno(o);
+      return this.db.transaction(async m => {
+        await this.validarObligacion(m, o);
+        const [caja] = await m.query('SELECT activa FROM finanzas.cuenta_financiera WHERE id_cuenta=1');
+        if (!caja?.activa) throw new ConflictException('Caja inexistente o inactiva.');
+        const [{ id_operacion }] = await m.query(
+          'INSERT INTO finanzas.operacion_financiera(id_cxc,id_cxp,id_reembolso,monto,metodo_pago,descripcion) VALUES($1,$2,$3,$4,$5,$6) RETURNING id_operacion',
+          [o.id_cxc, o.id_cxp, o.id_reembolso, o.monto, d.metodo_pago ?? null, d.descripcion || null]);
+        return this.detalle(m, id_operacion);
+      });
+    });
   }
-
-
-  // Flujo: crearPago (pendiente) -> decidirPago (aprobado/rechazado) -> ejecutarPago (ejecutado).
-  
-  /** Crea una solicitud de pago en estado `pendiente`.*/
-  crearPago(d: CrearPagoDto) {
-    this.validarOrigen(d);
-    const monto = d.monto.toFixed(2);
-    return this.operation(() => this.db.transaction(async (m) => {
-      if (d.tipo_operacion === 'cobro') await this.validarCuentaConSaldo(m, 'cobrar', d.id_cxc as number, monto);
-      if (d.tipo_operacion === 'proveedor') await this.validarCuentaConSaldo(m, 'pagar', d.id_cxp as number, monto);
-      await this.validarCajaActiva(m);
-      const [{ id_pago }] = await m.query(
-        `INSERT INTO finanzas.pago(id_cxc,id_cxp,id_empleado,id_nomina,id_reembolso,tipo_operacion,monto,metodo_pago,descripcion)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id_pago`,
-        [d.id_cxc ?? null, d.id_cxp ?? null, d.id_empleado ?? null, d.id_nomina ?? null, d.id_reembolso ?? null,
-          d.tipo_operacion, monto, d.metodo_pago, d.descripcion || null],
-      );
-      return this.detallePago(m, id_pago);
-    }));
-  }
-
-  /** Aprueba o rechaza un pago pendiente. El autorizador viene de la sesión, nunca del cuerpo. */
-  decidirPago(id: string, d: DecisionPagoDto, idAutorizador: number) {
-    const aprobar = d.decision === 'aprobada';
-    const observacion = d.observacion?.trim() || null;
-    if (!aprobar && !observacion) throw new BadRequestException('Debes indicar el motivo del rechazo.');
-    return this.operation(() => this.db.transaction(async (m) => {
-      const pago = await this.pagoBloqueado(m, id);
-      if (pago.estado !== 'pendiente') {
-        throw new ConflictException(`Solo se puede decidir un pago pendiente; estado actual: ${pago.estado}.`);
+  decidirOperacion(id: string, d: DecisionOperacionDto, autorizador: number) {
+    if (d.decision === 'rechazada' && !d.observacion?.trim()) throw new BadRequestException('Debes indicar el motivo del rechazo.');
+    if (d.decision === 'rechazada' && d.metodo_pago !== undefined) throw new BadRequestException('El rechazo no recibe método de pago.');
+    return this.operation(async () => {
+      await this.externos.validar('usuario', autorizador);
+      const [o] = await this.db.query('SELECT * FROM finanzas.operacion_financiera WHERE id_operacion=$1', [id]);
+      if (!o) throw new NotFoundException('Operación no encontrada.');
+      if (o.estado !== 'pendiente') throw new ConflictException('La operación ya tiene una decisión.');
+      if (d.decision === 'aprobada') {
+        if (!(d.metodo_pago ?? o.metodo_pago)) throw new BadRequestException('La ejecución requiere método de pago.');
+        await this.validarOrigenExterno(o);
       }
-      if (aprobar) {
-        await this.validarCuentaDelPago(m, pago);
-        await this.validarCajaActiva(m);
-      }
-      await m.query('SELECT finanzas.decidir_pago($1,$2,$3,$4)', [id, idAutorizador, aprobar, observacion]);
-      return this.detallePago(m, id);
-    }));
+      return this.db.transaction(async m => {
+        // La función SQL adquiere siempre primero el candado de caja y revalida las filas.
+        await m.query('SELECT finanzas.decidir_operacion($1,$2,$3,$4,$5)',
+          [id, autorizador, d.decision === 'aprobada', d.observacion?.trim() || null, d.metodo_pago ?? null]);
+        return this.detalle(m, id);
+      });
+    });
   }
-
-  /** Ejecuta un pago aprobado: movimiento de caja, saldo y estado de la cuenta, y aplicación a cuotas. */
-  ejecutarPago(id: string) {
-    return this.operation(() => this.db.transaction(async (m) => {
-      await m.query('SELECT pg_advisory_xact_lock(71007, 1)'); // misma clave que usa ejecutar_pago
-      const pago = await this.pagoBloqueado(m, id);
-      if (pago.estado === 'ejecutado') throw new ConflictException('El pago ya fue ejecutado.');
-      if (pago.estado !== 'aprobado') {
-        throw new ConflictException(`El pago debe estar aprobado para ejecutarse; estado actual: ${pago.estado}.`);
-      }
-      await this.validarCuentaDelPago(m, pago);
-      await this.validarCajaActiva(m);
-      await m.query('SELECT finanzas.ejecutar_pago($1)', [id]);
-      return this.detallePago(m, id);
-    }));
-  }
-
   saldo() {
     return this.operation(async () => {
       const [caja] = await this.db.query('SELECT * FROM finanzas.v_saldo_caja WHERE id_cuenta=1');
@@ -212,8 +139,5 @@ export class FinanzasV2Service {
       return caja;
     });
   }
-
-  movimientos() {
-    return this.operation(() => this.db.query('SELECT * FROM finanzas.movimiento_financiero ORDER BY id_mov_fin DESC'));
-  }
+  movimientos() { return this.operation(() => this.db.query('SELECT * FROM finanzas.movimiento_financiero ORDER BY id_mov_fin DESC')); }
 }

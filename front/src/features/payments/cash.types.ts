@@ -1,4 +1,4 @@
-export type MovementOrigin = 'Ventas' | 'Compras' | 'RR. HH.';
+export type MovementOrigin = 'Ventas' | 'Compras' | 'Reembolsos' | 'RR. HH.';
 export type MovementDirection = 'Ingreso' | 'Egreso';
 export type MovementStatus = 'Pendiente' | 'Autorizado' | 'Rechazado';
 
@@ -7,7 +7,7 @@ export interface MovementDecision {
   decidedAt: string;
   decidedBy: string;
   reason: string | null;
-  simulated: true;
+  simulated: boolean;
 }
 
 export interface CashMovement {
@@ -22,7 +22,7 @@ export interface CashMovement {
   status: MovementStatus;
   supportDescription: string | null;
   decision: MovementDecision | null;
-  simulated: true;
+  simulated: boolean;
 }
 
 export interface NewMovementRequest {
