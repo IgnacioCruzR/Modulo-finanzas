@@ -54,6 +54,27 @@ ventas 5001-5010, diez cuentas por cobrar, diez operaciones ejecutadas, diez
 autorizaciones y diez movimientos de ingreso. Conserva los totales, abonos y
 metodos originales; no fuerza IDs ni utiliza cuotas o datos personales.
 
+El volumen `finanzas-local_pg_finanzas_v2` conserva los datos al detener o recrear
+el contenedor. No utilizar `docker compose down -v` para la operación habitual:
+elimina los datos. Cambios posteriores de SQL requieren migraciones revisadas.
+
+## Seeders de desarrollo
+
+`sql/05_seeders.sql` carga al menos 10 registros en cada tabla del modelo v2:
+12 cuentas por cobrar, 12 por pagar, sus cuotas, 24 pagos en todos los estados,
+20 autorizaciones, 14 movimientos y 16 aplicaciones a cuotas. Los pagos pasan por
+`decidir_pago` y `ejecutar_pago`, por lo que saldos, estados y caja quedan
+coherentes. `cuenta_financiera` mantiene una sola fila por la restricción
+`ck_caja_unica`. El script no se carga automáticamente y se detiene sin cambios
+si ya se aplicó. Si también se usan `03_pruebas.sql` o el `seeders_finanzas.sql`
+de la raíz, hay que ejecutarlos antes, porque ambos asumen IDs fijos desde 1.
+En PowerShell:
+
+```powershell
+Get-Content -Raw database/local/sql/05_seeders.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U erp_user -d erp_local
+```
+
+## Escenario opcional de demostración
 ```powershell
 Get-Content -Raw seeders_finanzas.sql | docker compose exec -T postgres psql -U erp_user -d erp_local -v ON_ERROR_STOP=1
 ```

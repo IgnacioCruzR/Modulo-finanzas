@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Dashboard from '../features/dashboard/Dashboard';
 import CashManagementPage from '../features/payments/CashManagementPage';
+import PaymentRequestPage from '../features/payments/PaymentRequestPage';
 import ReportsPage from '../features/reports/ReportsPage';
 import SettingsPage from '../features/settings/SettingsPage';
 import { FinanceLayout, type FinancePage } from '../shared/layout/FinanceLayout';
@@ -14,6 +15,10 @@ function App() {
 
   if (activePage === 'Registro de pagos') {
     return <CashManagementPage onNavigate={setActivePage} />;
+  }
+
+  if (activePage === 'Registrar pago') {
+    return <PaymentRequestPage onNavigate={setActivePage} />;
   }
 
   if (activePage === 'Emisión de informes') {

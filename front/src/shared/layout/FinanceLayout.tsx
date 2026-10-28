@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react';
 
-export type FinancePage = 'Dashboard' | 'Registro de pagos' | 'Emisión de informes' | 'Configuraciones';
+export type FinancePage = 'Dashboard' | 'Registro de pagos' | 'Registrar pago' | 'Emisión de informes' | 'Configuraciones';
 
-type IconName = 'dashboard' | 'payments' | 'reports' | 'settings' | 'user' | 'bell' | 'logout';
+type IconName = 'dashboard' | 'payments' | 'register' | 'reports' | 'settings' | 'user' | 'bell' | 'logout';
 
 const navigation: { page: FinancePage; label: string; icon: IconName }[] = [
   { page: 'Dashboard', label: 'Dashboard', icon: 'dashboard' },
   { page: 'Registro de pagos', label: 'Gestión de caja', icon: 'payments' },
+  { page: 'Registrar pago', label: 'Registrar pago', icon: 'register' },
   { page: 'Emisión de informes', label: 'Emisión de informes', icon: 'reports' },
   { page: 'Configuraciones', label: 'Configuraciones', icon: 'settings' },
 ];
@@ -36,6 +37,13 @@ function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
         <svg {...common}>
           <rect x="2.5" y="5" width="19" height="14" rx="2" />
           <path d="M3 9h18M6 15h4m-4 2h7" />
+        </svg>
+      );
+    case 'register':
+      return (
+        <svg {...common}>
+          <path d="M14 2.5H6a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-11l-6-6Z" />
+          <path d="M14 2.5v6h6M12 11.5v6m-3-3h6" />
         </svg>
       );
     case 'reports':
