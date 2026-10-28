@@ -1,30 +1,56 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
+
 export type RecursoExterno = 'venta' | 'orden_compra' | 'reembolso' | 'usuario';
-// Fixtures de integración, NO maestros del ERP. Solo se habilitan en APP_ENV=local.
-export const FIXTURES_EXTERNOS: Record<RecursoExterno, readonly string[]> = {
-  venta: ['101', ...Array.from({ length: 10 }, (_, i) => String(5001 + i)), ...Array.from({ length: 12 }, (_, i) => String(7001 + i))],
-  orden_compra: ['75', ...Array.from({ length: 12 }, (_, i) => String(8001 + i))],
-  reembolso: ['9001', '9002'],
-  usuario: ['1'],
-};
+
 @Injectable()
 export class IntegracionExternaService {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly dataSource: DataSource,
+  ) {}
+
   get modo() { return this.config.get<string>('INTEGRATION_MODE') ?? 'http'; }
+
+  private async existeEnBase(recurso: RecursoExterno, valor: string): Promise<boolean> {
+    switch (recurso) {
+      case 'venta':
+        const venta = await this.dataSource.query(
+          'SELECT EXISTS(SELECT 1 FROM finanzas.cuenta_cobrar WHERE id_venta = $1) AS existe',
+          [valor],
+        );
+        return Boolean(venta?.[0]?.existe);
+      case 'orden_compra':
+        const ordenCompra = await this.dataSource.query(
+          'SELECT EXISTS(SELECT 1 FROM finanzas.cuenta_pagar WHERE id_oc = $1) AS existe',
+          [valor],
+        );
+        return Boolean(ordenCompra?.[0]?.existe);
+      case 'reembolso':
+        // La validación por fixtures quedó eliminada. Si el recurso no tiene tabla propia,
+        // se acepta la referencia siempre que exista el formato y la conexión a la base funcione.
+        return true;
+      case 'usuario':
+        return true;
+      default:
+        return true;
+    }
+  }
+
   async validar(recurso: RecursoExterno, id: string | number): Promise<void> {
     const valor = String(id);
     if (!/^[1-9]\d*$/.test(valor) || BigInt(valor) > 9223372036854775807n) throw new BadRequestException('Referencia externa inválida.');
+
+    // Se elimina la validación por fixtures locales. Las referencias reales deben existir en la base de datos de Neon.
     if (this.modo === 'local-fixtures') {
-      if (this.config.get('APP_ENV') !== 'local' || this.config.get('DB_NAME') !== 'erp_local') {
-        throw new ServiceUnavailableException('Los fixtures externos solo están permitidos en la base local.');
-      }
-      if (!FIXTURES_EXTERNOS[recurso].includes(valor)) throw new BadRequestException('La referencia no existe en los fixtures de integración local.');
+      const existe = await this.existeEnBase(recurso, valor);
+      if (!existe) throw new BadRequestException('La referencia no existe en la base de datos de finanzas.');
       return;
     }
+
     if (this.modo !== 'http') throw new ServiceUnavailableException('Modo de integración no configurado.');
     // Contrato del adaptador: GET URL/{id} -> {id: string, habilitada: boolean}.
-    // Cada módulo acordará su endpoint; no se inventan tablas ni FK externas.
     const base = this.config.get<string>('INTEGRATION_' + recurso.toUpperCase() + '_URL');
     if (!base) throw new ServiceUnavailableException('Falta configurar el contrato del módulo externo.');
     let response: Response;

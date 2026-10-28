@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { FinanceLayout, type FinancePage } from '../../shared/layout/FinanceLayout';
-import { demoAccounts } from './paymentRequest.mock';
+import { api } from '../../shared/services/api/client';
 import type {
+  AccountOption,
+  AccountStatus,
   CreatePaymentRequestPayload,
   OperationType,
   PaymentMethod,
@@ -74,10 +76,56 @@ function methodLabel(value: PaymentMethod | '') {
   return methodOptions.find((item) => item.value === value)?.label ?? '—';
 }
 
-// La maqueta aún no consume la API. Al conectarla, reemplazar por
-// fetch(`${apiBaseUrl}/api/finanzas/pagos`, { method: 'POST', body: JSON.stringify(payload) }).
+type ApiCuenta = {
+  id_cxc?: string | number | null;
+  id_cxp?: string | number | null;
+  id_venta?: string | number | null;
+  id_oc?: string | number | null;
+  estado?: AccountStatus | string | null;
+  saldo_pendiente?: string | number | null;
+  monto_total?: string | number | null;
+  fecha_vencimiento?: string | null;
+};
+
+function normalizeAccountOption(row: ApiCuenta, kind: 'cobrar' | 'pagar'): AccountOption {
+  const externalId = kind === 'cobrar' ? row.id_venta ?? row.id_cxc : row.id_oc ?? row.id_cxp;
+  const accountId = Number(kind === 'cobrar' ? row.id_cxc : row.id_cxp);
+  const status = (row.estado ?? 'pendiente') as AccountStatus;
+  const outstandingBalance = Number(row.saldo_pendiente ?? 0);
+  return {
+    id: Number.isFinite(accountId) ? accountId : 0,
+    kind,
+    originReference: `${kind === 'cobrar' ? 'Venta' : 'OC'} #${externalId ?? accountId ?? 0}`,
+    counterparty: `${kind === 'cobrar' ? 'Cliente' : 'Proveedor'} · ${externalId ?? accountId ?? 0}`,
+    totalAmount: Number(row.monto_total ?? 0),
+    outstandingBalance,
+    dueDate: row.fecha_vencimiento ?? '',
+    status,
+  };
+}
+
+async function loadAccounts(operationType: OperationType): Promise<AccountOption[]> {
+  if (operationType !== 'cobro' && operationType !== 'proveedor') return [];
+  const endpoint = operationType === 'cobro' ? '/cuentas-cobrar' : '/cuentas-pagar';
+  const rows = await api<ApiCuenta[]>(endpoint);
+  return rows.map((row) => normalizeAccountOption(row, operationType === 'cobro' ? 'cobrar' : 'pagar'));
+}
+
 async function submitPaymentRequest(payload: CreatePaymentRequestPayload) {
-  return payload;
+  const response = await api<{ id_operacion?: string; id_cxc?: string | number | null; id_cxp?: string | number | null; id_reembolso?: string | number | null; monto?: string | number; metodo_pago?: string | null; descripcion?: string | null; estado?: string | null; }>(
+    '/operaciones',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+
+  return {
+    tipo_operacion: payload.tipo_operacion,
+    monto: Number(response.monto ?? payload.monto),
+    metodo_pago: payload.metodo_pago,
+    descripcion: payload.descripcion,
+    ...(payload.id_cxc !== undefined ? { id_cxc: payload.id_cxc } : {}),
+    ...(payload.id_cxp !== undefined ? { id_cxp: payload.id_cxp } : {}),
+    ...(payload.id_reembolso !== undefined ? { id_reembolso: payload.id_reembolso } : {}),
+  } as CreatePaymentRequestPayload;
 }
 
 function FieldError({ field, errors }: { field: PaymentRequestField; errors: PaymentRequestErrors }) {
@@ -126,9 +174,31 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [registered, setRegistered] = useState<CreatePaymentRequestPayload | null>(null);
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
 
-  const errors = useMemo(() => validatePaymentRequest(values, demoAccounts), [values]);
+  useEffect(() => {
+    let active = true;
+    if (values.operationType !== 'cobro' && values.operationType !== 'proveedor') {
+      setAccounts([]);
+      return;
+    }
+    loadAccounts(values.operationType)
+      .then((loaded) => {
+        if (!active) return;
+        setAccounts(loaded);
+        if (values.accountId && !loaded.some((item) => String(item.id) === values.accountId)) {
+          setValues((current) => ({ ...current, accountId: '' }));
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setAccounts([]);
+      });
+    return () => { active = false; };
+  }, [values.operationType, values.accountId]);
+
+  const errors = useMemo(() => validatePaymentRequest(values, accounts), [values, accounts]);
   const visibleErrors = useMemo(() => {
     const visible: PaymentRequestErrors = {};
     for (const field of fieldOrder) {
@@ -137,8 +207,8 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
     return visible;
   }, [errors, submitAttempted, touched]);
 
-  const accountOptions = accountsFor(values.operationType, demoAccounts);
-  const account = selectedAccount(values, demoAccounts);
+  const accountOptions = accountsFor(values.operationType, accounts);
+  const account = selectedAccount(values, accounts);
   const amount = parseAmount(values.amount);
   const remainingBalance = account && amount !== null ? account.outstandingBalance - amount : null;
   const needsAccount = values.operationType === 'cobro' || values.operationType === 'proveedor';
@@ -220,7 +290,7 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
   }
 
   return (
-    <FinanceLayout activePage="Registrar pago" onNavigate={onNavigate} footerNote="Formulario de maqueta" layoutClassName="payment-request-layout">
+    <FinanceLayout activePage="Registrar pago" onNavigate={onNavigate} footerNote="Conectado a la API de finanzas" layoutClassName="payment-request-layout">
       <main className="dashboard-content pr-content">
         <header className="page-heading pr-page-heading">
           <div>
@@ -228,7 +298,6 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
             <h1>Registrar solicitud de pago</h1>
             <p className="pr-subtitle">Crea una solicitud que quedará <strong>pendiente</strong> hasta su aprobación en Gestión de caja.</p>
           </div>
-          <span className="pr-mode-badge">Maqueta · sin conexión a la API</span>
         </header>
 
         <ol className="pr-steps" aria-label="Progreso del registro">
@@ -245,10 +314,10 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
             <h2 id="pr-success-title">Solicitud validada y lista para enviar</h2>
             <p>
               {operationLabel(registered.tipo_operacion)} por <strong>{currency.format(registered.monto)}</strong> mediante {methodLabel(registered.metodo_pago).toLocaleLowerCase('es-CL')}.
-              Al conectarse a la API quedará en estado <strong>pendiente</strong> hasta que un administrador la apruebe.
+              La solicitud se envió a la API y quedó en estado <strong>pendiente</strong> hasta que un administrador la apruebe.
             </p>
             <details className="pr-payload">
-              <summary>Ver cuerpo de POST /api/finanzas/pagos</summary>
+              <summary>Ver cuerpo de POST /api/finanzas/operaciones</summary>
               <pre>{JSON.stringify(registered, null, 2)}</pre>
             </details>
             <div className="pr-success-actions">
