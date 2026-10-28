@@ -1,29 +1,7 @@
-# Backend – Módulo de Finanzas
+# Backend - Finanzas
 
-## Modelo activo: Finanzas v2
-
-La API activa usa el modelo Finanzas v2, conexión TypeORM y Administrador 1
-como usuario mock local. Desde la raíz: `docker compose up -d --wait`.
-Contrato, configuración y endpoints en [Finanzas/v2/README.md](Finanzas/v2/README.md).
-El frontend original está en http://localhost:8080 y funciona en modo demostración;
-no consume todavía los endpoints de esta API.
-
-## API Sprint 2
-
-Todas las rutas tienen el prefijo `/api/finanzas`.
-
-- `GET /cuentas-cobrar`: lista las cuentas por cobrar.
-- `GET /cuentas-cobrar/:id`: consulta la cuenta con sus cuotas.
-- `POST /pagos`: crea una solicitud pendiente.
-- `POST /pagos/:id/decision`: aprueba o rechaza el pago.
-- `POST /pagos/:id/ejecutar`: ejecuta el pago aprobado, crea el movimiento
-  financiero y aplica el pago a la deuda y sus cuotas.
-
-La ruta de decisión usa el segmento `/decision` (no `/aprobar`) y el listado
-usa `/cuentas-cobrar` (no `/cuentas-por-cobrar`).
-
-**Nota técnica:** `finanzas.cuenta_financiera` permite una sola caja, con
-`id_cuenta = 1`.
+Modelo central de seis tablas. Contratos y configuración en [API activa](Finanzas/v2/README.md).
+Aprobar ejecuta en una transacción; sin cuotas ni nóminas. Los modelos siguientes son históricos.
 
 ## Documentación del modelo anterior (referencia)
 

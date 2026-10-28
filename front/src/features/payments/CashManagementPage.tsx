@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { FinanceLayout, type FinancePage } from '../../shared/layout/FinanceLayout';
-import { initialCashMovements } from './cash.mock';
-import { createCashMovement, decideCashMovement, listCashMovements } from './cash.service';
+import { createCashMovement, decideCashMovement, listCashMovements, type MetodoPago } from './cash.api';
 import type {
   CashMovement,
   MovementDirection,
@@ -17,10 +16,10 @@ const currency = new Intl.NumberFormat('es-CL', {
   maximumFractionDigits: 0,
 });
 const dateFormat = new Intl.DateTimeFormat('es-CL');
-const origins: MovementOrigin[] = ['Ventas', 'Compras', 'RR. HH.'];
+const origins: MovementOrigin[] = ['Ventas', 'Compras', 'Reembolsos'];
 const directions: MovementDirection[] = ['Ingreso', 'Egreso'];
 const statusOptions: MovementStatus[] = ['Pendiente', 'Autorizado', 'Rechazado'];
-const demoAdministrator = 'Administrador de Finanzas · vista demo';
+const demoAdministrator = 'Administrador 1 · entorno local';
 
 function formatDate(value: string) {
   return dateFormat.format(new Date(`${value}T12:00:00`));
@@ -66,7 +65,7 @@ function CashModal({ title, onClose, children }: { title: string; onClose: () =>
     <div className="cash-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="cash-modal" role="dialog" aria-modal="true" aria-labelledby="cash-modal-title">
         <header className="cash-modal-header">
-          <div><p>LESGO · AUTORIZACIÓN DEMOSTRATIVA</p><h2 id="cash-modal-title">{title}</h2></div>
+          <div><p>LESGO · OPERACIONES FINANCIERAS</p><h2 id="cash-modal-title">{title}</h2></div>
           <button type="button" className="cash-close-button" aria-label="Cerrar ventana" onClick={onClose}>×</button>
         </header>
         <div className="cash-modal-content">{children}</div>
@@ -94,20 +93,20 @@ function MovementDetails({
         <div><dt>Módulo de origen</dt><dd>{movement.origin}</dd></div>
         <div><dt>Tipo de movimiento</dt><dd>{movement.direction}</dd></div>
         <div><dt>Referencia</dt><dd>{movement.reference}</dd></div>
-        <div><dt>Beneficiario / entidad</dt><dd>{movement.beneficiary}</dd></div>
+        <div><dt>Método de pago</dt><dd>{movement.beneficiary}</dd></div>
         <div><dt>Monto solicitado</dt><dd className="movement-detail-amount">{currency.format(movement.amount)}</dd></div>
         <div><dt>Fecha de solicitud</dt><dd>{formatDate(movement.requestDate)}</dd></div>
         <div className="full-detail"><dt>Descripción / concepto</dt><dd>{movement.concept}</dd></div>
-        <div className="full-detail"><dt>Respaldo informativo</dt><dd>{movement.supportDescription ?? 'No se adjuntaron documentos o respaldos a esta solicitud demo.'}</dd></div>
+        <div className="full-detail"><dt>Respaldo informativo</dt><dd>{movement.supportDescription ?? 'No hay documentos adjuntos a esta operación.'}</dd></div>
         <div className="full-detail"><dt>Estado</dt><dd><StatusBadge status={movement.status} /></dd></div>
         {movement.decision && <>
-          <div><dt>Decisión</dt><dd>{movement.decision.status} · demostrativa</dd></div>
+          <div><dt>Decisión</dt><dd>{movement.decision.status} · registrada</dd></div>
           <div><dt>Decidido por</dt><dd>{movement.decision.decidedBy}</dd></div>
           <div className="full-detail"><dt>Fecha de decisión</dt><dd>{new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(movement.decision.decidedAt))}</dd></div>
           {movement.decision.reason && <div className="full-detail"><dt>Motivo de rechazo</dt><dd>{movement.decision.reason}</dd></div>}
         </>}
       </dl>
-      <p className="cash-modal-notice"><span aria-hidden="true">i</span> Una autorización simulada no significa que el dinero haya sido transferido, cobrado o pagado.</p>
+      <p className="cash-modal-notice"><span aria-hidden="true">i</span> Aprobar registra inmediatamente la ejecución en la caja local del ERP. No realiza transferencias bancarias.</p>
       <div className="cash-modal-actions">
         {movement.status === 'Pendiente' ? <>
           <button type="button" className="cash-button danger-outline" onClick={() => onReject(movement)}>Rechazar solicitud</button>
@@ -119,7 +118,7 @@ function MovementDetails({
 }
 
 function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) => void }) {
-  const [movements, setMovements] = useState<CashMovement[]>(initialCashMovements);
+  const [movements, setMovements] = useState<CashMovement[]>([]);
   const [loading, setLoading] = useState(true);
   const [storageError, setStorageError] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -145,22 +144,25 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
     concept: '',
   });
   const [manualAmount, setManualAmount] = useState('');
+  const [manualMethod, setManualMethod] = useState<MetodoPago>('efectivo');
   const [manualErrors, setManualErrors] = useState<Record<string, string>>({});
 
-  const refresh = useCallback(() => {
+  const [saving, setSaving] = useState(false);
+
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setMovements(listCashMovements());
+      setMovements(await listCashMovements());
       setStorageError('');
     } catch (error) {
-      setStorageError(error instanceof Error ? error.message : 'No se pudieron cargar los movimientos demostrativos.');
+      setStorageError(error instanceof Error ? error.message : 'No se pudieron cargar los movimientos.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const periodMovements = useMemo(() => movements.filter((movement) =>
@@ -187,17 +189,13 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
   }, [directionFilter, fromDate, movements, originFilter, query, statusFilter, toDate]);
   const pendingMovements = filteredMovements.filter((item) => item.status === 'Pendiente');
 
-  function saveMovements(next: CashMovement[]) {
-    setMovements(next);
-    setStorageError('');
-  }
-
   function showMovement(movement: CashMovement) {
     setSelectedMovement(movement);
   }
 
   function beginAuthorization(movement: CashMovement) {
     setSelectedMovement(null);
+    setManualMethod(['efectivo','transferencia','tarjeta','simulado'].includes(movement.beneficiary) ? movement.beneficiary as MetodoPago : 'efectivo');
     setAuthorizationCandidate(movement);
   }
 
@@ -208,62 +206,71 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
     setReasonError('');
   }
 
-  function confirmAuthorization() {
-    if (!authorizationCandidate) return;
+  async function confirmAuthorization() {
+    if (!authorizationCandidate || saving) return;
+    setSaving(true);
     try {
-      const next = decideCashMovement(authorizationCandidate.id, 'Autorizado', '', movements);
-      saveMovements(next);
-      setFeedback({ type: 'success', message: `Autorización simulada completada para ${authorizationCandidate.id}. No se ejecutó ni transfirió dinero.` });
+      await decideCashMovement(authorizationCandidate.id, 'Autorizado', '', manualMethod);
+      setFeedback({ type: 'success', message: `Operación ${authorizationCandidate.id} ejecutada. La caja fue actualizada.` });
       setAuthorizationCandidate(null);
     } catch (error) {
-      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar la autorización demostrativa.' });
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar la autorización.' });
+    } finally {
+      await refresh(); // muestra el estado real, también si falló a mitad del flujo
+      setSaving(false);
     }
   }
 
-  function confirmRejection(event: FormEvent<HTMLFormElement>) {
+  async function confirmRejection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!rejectionCandidate) return;
+    if (!rejectionCandidate || saving) return;
     if (!rejectionReason.trim()) {
       setReasonError('Ingresa un motivo para rechazar esta solicitud.');
       return;
     }
+    setSaving(true);
     try {
-      const next = decideCashMovement(rejectionCandidate.id, 'Rechazado', rejectionReason, movements);
-      saveMovements(next);
-      setFeedback({ type: 'success', message: `Rechazo simulado registrado para ${rejectionCandidate.id}. No se modificaron datos reales.` });
+      await decideCashMovement(rejectionCandidate.id, 'Rechazado', rejectionReason);
+      setFeedback({ type: 'success', message: `Operación ${rejectionCandidate.id} rechazada. No se modificó la caja.` });
       setRejectionCandidate(null);
       setRejectionReason('');
       setReasonError('');
     } catch (error) {
-      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar el rechazo demostrativo.' });
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar el rechazo.' });
+    } finally {
+      await refresh();
+      setSaving(false);
     }
   }
 
-  function createManualRequest(event: FormEvent<HTMLFormElement>) {
+  async function createManualRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     setFeedback(null);
     const errors: Record<string, string> = {};
     if (!manualForm.reference.trim()) errors.reference = 'Ingresa la referencia de la operación.';
-    if (!manualForm.beneficiary.trim()) errors.beneficiary = 'Ingresa el beneficiario o concepto asociado.';
     const value = Number(manualAmount);
     if (!manualAmount || !Number.isFinite(value) || value <= 0) errors.amount = 'El monto debe ser mayor que cero.';
     if (!manualForm.requestDate) errors.requestDate = 'Selecciona la fecha de solicitud.';
     if (!manualForm.concept.trim()) errors.concept = 'Ingresa una descripción del movimiento.';
     setManualErrors(errors);
     if (Object.keys(errors).length) return;
+    setSaving(true);
     try {
-      const next = createCashMovement({ ...manualForm, amount: value }, movements);
-      saveMovements(next);
+      const created = await createCashMovement({ ...manualForm, amount: value }, manualMethod);
+      await refresh();
       setManualForm((current) => ({ ...current, reference: '', beneficiary: '', amount: 0, requestDate: currentDate(), concept: '' }));
       setManualAmount('');
       setManualErrors({});
       setManualOpen(false);
-      setFeedback({ type: 'success', message: `Solicitud demostrativa ${next[0].id} creada con estado Pendiente. Debe revisarse antes de autorizarse.` });
+      setFeedback({ type: 'success', message: `Solicitud ${created.id} creada con estado Pendiente. Debe revisarse antes de autorizarse.` });
       setStatusFilter('Todos');
       setFromDate('');
       setToDate('');
     } catch (error) {
-      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo registrar la solicitud demostrativa.' });
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo registrar la solicitud.' });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -282,7 +289,7 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
   }
 
   return (
-    <FinanceLayout activePage="Registro de pagos" onNavigate={onNavigate} footerNote="Autorizaciones de demostración" layoutClassName="cash-layout">
+    <FinanceLayout activePage="Registro de pagos" onNavigate={onNavigate} footerNote="Operaciones financieras locales" layoutClassName="cash-layout">
       <main className="dashboard-content cash-content">
         <header className="page-heading cash-page-heading">
           <div>
@@ -290,10 +297,10 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
             <h1>Autorización de movimientos</h1>
             <p className="cash-subtitle">Revisa y autoriza las entradas y salidas de dinero del ERP LESGO.</p>
           </div>
-          <div className="cash-header-badges"><span className="cash-mode-badge">Modo demostrativo</span><span className="cash-role-badge">{demoAdministrator}</span></div>
+          <div className="cash-header-badges"><span className="cash-mode-badge">Entorno local</span><span className="cash-role-badge">{demoAdministrator}</span></div>
         </header>
 
-        <div className="cash-disclaimer" role="note"><span aria-hidden="true">i</span><p><strong>Flujo de demostración.</strong> La autorización representa una decisión de revisión, no una transferencia, cobro ni pago. No se realizan operaciones financieras reales y las decisiones no son permisos de servidor.</p></div>
+        <div className="cash-disclaimer" role="note"><span aria-hidden="true">i</span><p><strong>Caja local del ERP.</strong> Aprobar ejecuta la operación y actualiza los saldos en PostgreSQL. No se realizan transferencias bancarias. La identidad y las referencias externas son de prueba.</p></div>
 
         {storageError && <div className="cash-alert error" role="alert"><span>{storageError}</span><button type="button" onClick={refresh}>Reintentar</button></div>}
         {feedback && <div className={`cash-alert ${feedback.type}`} role={feedback.type === 'error' ? 'alert' : 'status'}><span>{feedback.message}</span><button type="button" aria-label="Cerrar notificación" onClick={() => setFeedback(null)}>×</button></div>}
@@ -318,7 +325,7 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
           </div>
           <div className="cash-table-wrap">
             <table className="cash-table">
-              <thead><tr><th>ID</th><th>Origen</th><th>Tipo</th><th>Referencia</th><th>Beneficiario / concepto</th><th>Monto solicitado</th><th>Fecha</th><th>Estado</th><th>Acción</th></tr></thead>
+              <thead><tr><th>ID</th><th>Origen</th><th>Tipo</th><th>Referencia</th><th>Método / concepto</th><th>Monto solicitado</th><th>Fecha</th><th>Estado</th><th>Acción</th></tr></thead>
               <tbody>{pendingMovements.map((movement) => <tr key={movement.id}>
                 <td><strong>{movement.id}</strong></td><td><OriginBadge origin={movement.origin} /></td><td><DirectionBadge direction={movement.direction} /></td><td>{movement.reference}</td><td><span className="cash-beneficiary">{movement.beneficiary}</span><small className="cash-concept">{movement.concept}</small></td><td className="cash-amount">{currency.format(movement.amount)}</td><td>{formatDate(movement.requestDate)}</td><td><StatusBadge status={movement.status} /></td><td><button className="cash-review-button" type="button" onClick={() => showMovement(movement)}>Revisar</button></td>
               </tr>)}</tbody>
@@ -329,7 +336,7 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
         </section>
 
         <section className="cash-panel movement-history" aria-labelledby="movement-history-heading">
-          <div className="cash-panel-heading"><div><h2 id="movement-history-heading">Historial de movimientos</h2><p>Solicitudes pendientes, decisiones demostrativas y movimientos revisados</p></div><span className="cash-history-demo">Historial demo local</span></div>
+          <div className="cash-panel-heading"><div><h2 id="movement-history-heading">Historial de movimientos</h2><p>Solicitudes y decisiones registradas en PostgreSQL</p></div><span className="cash-history-demo">Historial local</span></div>
           <div className="cash-table-wrap">
             <table className="cash-table history-table">
               <thead><tr><th>Identificador</th><th>Origen</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Fecha</th><th>Estado</th><th>Acción</th></tr></thead>
@@ -343,30 +350,30 @@ function CashManagementPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
         </section>
 
         <section className="cash-panel manual-panel">
-          <button type="button" className="manual-toggle" aria-expanded={manualOpen} onClick={() => setManualOpen((open) => !open)}><span><strong>Registro manual de movimientos</strong><small>Crea una solicitud demo pendiente para probar la revisión y autorización.</small></span><span className={`manual-chevron${manualOpen ? ' open' : ''}`}>⌄</span></button>
+          <button type="button" className="manual-toggle" aria-expanded={manualOpen} onClick={() => setManualOpen((open) => !open)}><span><strong>Registro manual de movimientos</strong><small>Crea una solicitud pendiente vinculada a una obligación o reembolso.</small></span><span className={`manual-chevron${manualOpen ? ' open' : ''}`}>⌄</span></button>
           {manualOpen && <form className="manual-movement-form" onSubmit={createManualRequest} noValidate>
             <label className="manual-field"><span>Tipo de movimiento <b>*</b></span><select value={manualForm.direction} onChange={(event) => updateManual('direction', event.target.value as MovementDirection)}>{directions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="manual-field"><span>Módulo de origen <b>*</b></span><select value={manualForm.origin} onChange={(event) => updateManual('origin', event.target.value as MovementOrigin)}>{origins.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="manual-field"><span>Referencia <b>*</b></span><input value={manualForm.reference} maxLength={60} onChange={(event) => updateManual('reference', event.target.value)} placeholder="Pedido, orden de compra o nómina" aria-invalid={Boolean(manualErrors.reference)} />{manualErrors.reference && <small className="manual-error">{manualErrors.reference}</small>}</label>
-            <label className="manual-field"><span>Beneficiario / entidad <b>*</b></span><input value={manualForm.beneficiary} maxLength={120} onChange={(event) => updateManual('beneficiary', event.target.value)} placeholder="Persona, empresa u operación" aria-invalid={Boolean(manualErrors.beneficiary)} />{manualErrors.beneficiary && <small className="manual-error">{manualErrors.beneficiary}</small>}</label>
-            <label className="manual-field"><span>Monto solicitado (CLP) <b>*</b></span><input type="number" min="1" step="1" value={manualAmount} onChange={(event) => { setManualAmount(event.target.value); setManualErrors((current) => ({ ...current, amount: '' })); }} placeholder="0" aria-invalid={Boolean(manualErrors.amount)} />{manualErrors.amount && <small className="manual-error">{manualErrors.amount}</small>}</label>
-            <label className="manual-field"><span>Fecha de solicitud <b>*</b></span><input type="date" value={manualForm.requestDate} max={currentDate()} onChange={(event) => updateManual('requestDate', event.target.value)} aria-invalid={Boolean(manualErrors.requestDate)} />{manualErrors.requestDate && <small className="manual-error">{manualErrors.requestDate}</small>}</label>
+            <label className="manual-field"><span>Referencia <b>*</b></span><input value={manualForm.reference} maxLength={60} onChange={(event) => updateManual('reference', event.target.value)} placeholder="ID de cuenta por cobrar, pagar o reembolso" aria-invalid={Boolean(manualErrors.reference)} />{manualErrors.reference && <small className="manual-error">{manualErrors.reference}</small>}</label>
+            <label className="manual-field"><span>Método de pago <b>*</b></span><select value={manualMethod} onChange={event => setManualMethod(event.target.value as MetodoPago)}>{['efectivo','transferencia','tarjeta','simulado'].map(method => <option key={method}>{method}</option>)}</select></label>
+            <label className="manual-field"><span>Monto solicitado (CLP) <b>*</b></span><input type="number" min="0.01" step="0.01" value={manualAmount} onChange={(event) => { setManualAmount(event.target.value); setManualErrors((current) => ({ ...current, amount: '' })); }} placeholder="0" aria-invalid={Boolean(manualErrors.amount)} />{manualErrors.amount && <small className="manual-error">{manualErrors.amount}</small>}</label>
             <label className="manual-field full"><span>Concepto / observaciones <b>*</b></span><textarea rows={3} maxLength={300} value={manualForm.concept} onChange={(event) => updateManual('concept', event.target.value)} placeholder="Describe el motivo de la solicitud" aria-invalid={Boolean(manualErrors.concept)} />{manualErrors.concept && <small className="manual-error">{manualErrors.concept}</small>}</label>
-            <div className="manual-form-actions"><p>La solicitud se creará siempre con estado <strong>Pendiente</strong>. La simulación no altera saldos ni ejecuta operaciones.</p><button className="cash-button primary" type="submit" disabled={Boolean(storageError)}>Crear solicitud pendiente</button></div>
+            <div className="manual-form-actions"><p>La solicitud se creará siempre con estado <strong>Pendiente</strong>. La caja se actualiza al aprobar.</p><button className="cash-button primary" type="submit" disabled={Boolean(storageError)}>Crear solicitud pendiente</button></div>
           </form>}
         </section>
-        <p className="cash-security-note">Las decisiones y el perfil mostrados son solo de interfaz demo. La autorización efectiva requiere identidad, permisos y validación del backend.</p>
+        <p className="cash-security-note">Administrador 1 es un usuario de prueba local. Las decisiones se validan y registran en el backend.</p>
       </main>
 
       {selectedMovement && <MovementDetails movement={selectedMovement} onClose={() => setSelectedMovement(null)} onAuthorize={beginAuthorization} onReject={beginRejection} />}
-      {authorizationCandidate && <CashModal title="Confirmar autorización simulada" onClose={() => setAuthorizationCandidate(null)}>
+      {authorizationCandidate && <CashModal title="Aprobar y ejecutar operación" onClose={() => setAuthorizationCandidate(null)}>
         <div className="decision-summary"><div><span>ID</span><strong>{authorizationCandidate.id}</strong></div><div><span>Origen</span><strong>{authorizationCandidate.origin}</strong></div><div><span>Tipo</span><DirectionBadge direction={authorizationCandidate.direction} /></div><div><span>Monto</span><strong>{currency.format(authorizationCandidate.amount)}</strong></div></div>
-        <p className="decision-copy">Vas a marcar esta solicitud como <strong>Autorizada</strong> dentro de la demostración. Esta decisión no confirma ejecución, transferencia, cobro ni pago.</p>
-        <div className="cash-modal-actions"><button className="cash-button secondary" type="button" onClick={() => setAuthorizationCandidate(null)}>Cancelar</button><button className="cash-button success" type="button" onClick={confirmAuthorization}>Confirmar autorización demo</button></div>
+        <p className="decision-copy">Vas a <strong>aprobar y ejecutar</strong> esta operación. Se registrará el movimiento y se actualizarán los saldos dentro de una misma transacción.</p>
+        <label className="manual-field"><span>Método para ejecutar <b>*</b></span><select value={manualMethod} onChange={event => setManualMethod(event.target.value as MetodoPago)}>{['efectivo','transferencia','tarjeta','simulado'].map(method => <option key={method}>{method}</option>)}</select></label>
+        <div className="cash-modal-actions"><button className="cash-button secondary" type="button" onClick={() => setAuthorizationCandidate(null)}>Cancelar</button><button className="cash-button success" type="button" disabled={saving} onClick={confirmAuthorization}>Aprobar y ejecutar</button></div>
       </CashModal>}
       {rejectionCandidate && <CashModal title="Rechazar solicitud" onClose={() => { setRejectionCandidate(null); setReasonError(''); }}>
         <div className="decision-summary"><div><span>ID</span><strong>{rejectionCandidate.id}</strong></div><div><span>Origen</span><strong>{rejectionCandidate.origin}</strong></div><div><span>Tipo</span><DirectionBadge direction={rejectionCandidate.direction} /></div><div><span>Monto</span><strong>{currency.format(rejectionCandidate.amount)}</strong></div></div>
-        <form onSubmit={confirmRejection} noValidate><label className="rejection-reason"><span>Motivo del rechazo <b>*</b></span><textarea rows={4} maxLength={500} value={rejectionReason} onChange={(event) => { setRejectionReason(event.target.value); setReasonError(''); }} placeholder="Indica por qué no se autoriza esta solicitud" aria-invalid={Boolean(reasonError)} aria-describedby={reasonError ? 'reject-reason-error' : undefined} />{reasonError && <small id="reject-reason-error">{reasonError}</small>}</label><p className="decision-copy">El rechazo se guardará en el historial demostrativo. No modifica saldos ni datos reales.</p><div className="cash-modal-actions"><button className="cash-button secondary" type="button" onClick={() => { setRejectionCandidate(null); setReasonError(''); }}>Cancelar</button><button className="cash-button danger" type="submit">Confirmar rechazo demo</button></div></form>
+        <form onSubmit={confirmRejection} noValidate><label className="rejection-reason"><span>Motivo del rechazo <b>*</b></span><textarea rows={4} maxLength={500} value={rejectionReason} onChange={(event) => { setRejectionReason(event.target.value); setReasonError(''); }} placeholder="Indica por qué no se autoriza esta solicitud" aria-invalid={Boolean(reasonError)} aria-describedby={reasonError ? 'reject-reason-error' : undefined} />{reasonError && <small id="reject-reason-error">{reasonError}</small>}</label><p className="decision-copy">El rechazo se guardará en el historial. No generará un movimiento de caja.</p><div className="cash-modal-actions"><button className="cash-button secondary" type="button" onClick={() => { setRejectionCandidate(null); setReasonError(''); }}>Cancelar</button><button className="cash-button danger" type="submit">Confirmar rechazo</button></div></form>
       </CashModal>}
     </FinanceLayout>
   );

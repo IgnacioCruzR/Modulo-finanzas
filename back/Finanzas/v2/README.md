@@ -1,118 +1,53 @@
-# API local Finanzas v2
+# API de Finanzas: modelo central
+La carpeta mantiene su nombre v2; el modelo activo tiene seis tablas y no usa cuotas.
+Prefijo: `/api/finanzas`. BIGINT y NUMERIC se devuelven como cadenas.
 
-La API activa permite consultar cuentas y gestionar pagos transaccionales en
-tres pasos: crear la solicitud, aprobarla o rechazarla y ejecutar el pago.
-La ejecución registra el movimiento financiero, actualiza el saldo de la cuenta
-y aplica el monto a las cuotas.
+| Método | Ruta | Uso |
+|---|---|---|
+| GET | /salud | Verifica el modelo activo y la conexión |
+| GET | /usuario | Administrador 1 local |
+| GET, POST | /cuentas-cobrar | Consultar o recibir una obligación de Ventas |
+| GET | /cuentas-cobrar/:id | Detalle |
+| GET, POST | /cuentas-pagar | Consultar o recibir una obligación de Compras |
+| GET | /cuentas-pagar/:id | Detalle |
+| GET, POST | /operaciones | Consultar o solicitar operación |
+| GET | /operaciones/:id | Incluye autorización y movimiento |
+| POST | /operaciones/:id/decision | Rechazar o aprobar y ejecutar atómicamente |
+| GET | /caja/saldo | Vista de saldo |
+| GET | /movimientos | Movimientos confirmados |
 
-Modelo activo: las seis tablas de `database/local/sql/01_schema.sql`.
-La migración `04_cuotas.sql` agrega dos tablas de cuotas y aplicaciones, sin
-reemplazar las seis originales. Alcance en [CUOTAS.md](../../../database/local/CUOTAS.md).
-Los módulos anteriores se conservan en `back/Finanzas/`, pero no se importan en
-`AppModule` porque usan tablas incompatibles. Sus rutas `/facturas`, `/clientes`,
-`/metodos-pago` y `/payments` no están activas; no se aplican sus scripts SQL.
+Se retiran /pagos y /pagos/:id/ejecutar. No existe ejecución separada.
+Los consumidores deben actualizar rutas, id_operacion, fecha_ejecucion y estados.
 
-## Arranque y usuario
+## Payloads
+Cuenta por cobrar: `{"id_venta":7001,"monto_total":100000}`.
+Cuenta por pagar: `{"id_oc":8001,"monto_total":200000}`.
+Ambas admiten fecha_emision y fecha_vencimiento (YYYY-MM-DD). El saldo inicial
+es el total y el estado pendiente. No aceptan terceros, cuotas, saldo ni estado.
 
-Desde la raíz: `docker compose up -d --build --wait`.
-API: `http://localhost:3000/api/finanzas`. PostgreSQL: `localhost:15433`.
-En este equipo se confió en los certificados públicos de Windows durante la
-compilación npm mediante un secreto de BuildKit, sin desactivar TLS. Si la red
-intercepta HTTPS y se necesita reconstruir la imagen, desde la raíz:
+Operación: `{"id_cxp":1,"monto":1000,"metodo_pago":"transferencia","descripcion":"Abono a orden de compra"}`.
+Exactamente uno de id_cxc/id_cxp/id_reembolso; los otros pueden omitirse o ser null,
+nunca cero. Sin tipo_operacion ni nómina. Monto positivo, hasta dos decimales.
+Método opcional al solicitar; obligatorio para ejecutar.
 
-```powershell
-docker build --secret id=npm_ca,src=.npm-ca.local -t finanzas-local-api ./back
-docker compose up -d --no-build --wait
-```
+Aprobar: `{"decision":"aprobada"}`, o agregar metodo_pago si estaba pendiente.
+Rechazar: `{"decision":"rechazada","observacion":"Motivo"}`.
+El autorizador viene de la sesión; no se admite en el cuerpo. Campos desconocidos
+se rechazan. Una segunda decisión devuelve 409 y no duplica movimientos.
 
-`.npm-ca.local` contiene certificados públicos de confianza del equipo, está
-ignorado por Git y no se copia a la imagen. En redes sin este requisito basta
-con `docker compose up -d --build --wait`.
+Filtros de cuentas: estado y venta/orden_compra. De operaciones: estado
+(pendiente/rechazada/ejecutada) y origen (cobro/proveedor/reembolso).
 
-Se requiere Node 22 para ejecutar la API fuera de Docker.
-Desde `back/` también se puede usar `npm ci`, `npm run build`, `npm start`;
-se carga el `.env` de esa carpeta o, si no existe, el de la raíz. Detener primero
-el servicio API de Docker para liberar el puerto 3000.
+400 entrada inválida; 403 mock no habilitado; 404 referencia interna inexistente;
+409 estado, duplicado o saldo incompatible; 503 integración externa no disponible.
+Creaciones: 201; decisiones: 200.
 
-Todas las rutas requieren el mock local: `APP_ENV=local`,
-`MOCK_AUTH_ENABLED=true`, host local y base `erp_local`. El usuario siempre es
-Administrador 1, ID 1; no se acepta `id_autorizador` desde el cliente.
-No hay contraseña de administrador ni autenticación real. El Compose publica
-ambos servicios solo en loopback. No habilitar este mock en una base remota.
+## Entorno
+Node 22 y PostgreSQL 17. Configuración .env en back/ o raíz; synchronize=false.
+APP_ENV=local, MOCK_AUTH_ENABLED=true y base erp_local permiten Administrador 1.
+INTEGRATION_MODE=local-fixtures valida las referencias de prueba documentadas.
+Para HTTP configurar INTEGRATION_VENTA_URL, INTEGRATION_ORDEN_COMPRA_URL,
+INTEGRATION_REEMBOLSO_URL e INTEGRATION_USUARIO_URL. Los endpoints definitivos
+y la autenticación real se acordarán con los otros módulos.
 
-## Contrato
-
-Las respuestas devuelven BIGINT y NUMERIC como cadenas, fechas DATE como
-`YYYY-MM-DD`, timestamps como ISO y campos ausentes opcionales como `null`.
-Los importes de entrada son números positivos con un máximo de dos decimales;
-los IDs en cuerpos JSON son enteros positivos hasta `Number.MAX_SAFE_INTEGER`.
-Los IDs de ruta admiten todo el rango BIGINT positivo. Los campos desconocidos
-se rechazan para evitar cambios de estado o autorizador desde el cliente.
-
-Todas las rutas siguientes tienen prefijo `/api/finanzas`:
-
-| Método | Ruta | Resultado / entrada | Estado actual |
-|---|---|---|---|
-| GET | `/salud` | Conexión PostgreSQL y modelo activo. | Activo |
-| GET | `/usuario` | Administrador mock actual. | Activo |
-| GET | `/cuentas-cobrar` | Lista; filtros `venta` y `estado`. | Activo |
-| GET | `/cuentas-cobrar/:id` | Cuenta por cobrar. | Activo |
-| GET | `/cuentas-pagar` | Lista; filtros `orden_compra` y `estado`. | Activo |
-| GET | `/cuentas-pagar/:id` | Cuenta por pagar. | Activo |
-| POST | `/pagos` | Crea una solicitud pendiente. | Activo |
-| GET | `/pagos` | Lista; filtros `estado` y `tipo_operacion`. | Activo |
-| GET | `/pagos/:id` | Pago con `autorizacion` y `movimiento` (o `null`). | Activo |
-| POST | `/pagos/:id/decision` | `decision`: `aprobada`/`rechazada`; `observacion` obligatoria al rechazar. | Activo |
-| POST | `/pagos/:id/ejecutar` | Cuerpo vacío `{}`; ejecuta el pago aprobado. | Activo |
-| GET | `/caja/saldo` | Saldo inicial y actual de la caja. | Activo |
-| GET | `/movimientos` | Movimientos efectivamente ejecutados. | Activo |
-
-El flujo de pagos es: `POST /pagos` crea la solicitud; `POST /pagos/:id/decision`
-la aprueba o rechaza; `POST /pagos/:id/ejecutar` realiza la transacción. La ruta
-de decisión recibe `{"decision":"aprobada"}` o
-`{"decision":"rechazada","observacion":"Motivo"}`. La ejecución recibe `{}`.
-No existe una ruta `/pagos/:id/aprobar`: el endpoint activo es
-`/pagos/:id/decision`. La consulta activa usa `/cuentas-cobrar`, no
-`/cuentas-por-cobrar`.
-
-Crear cuenta debe inicializar saldo igual al monto y estado `pendiente`.
-`cantidad_cuotas` es opcional y vale 1; permite un entero entre 1 y 32767, siempre
-que el total alcance al menos 0,01 por cuota. Se generan las cuotas automáticamente
-al crear la cuenta, sin fechas individuales ni reprogramación. El detalle de
-cuenta incluye `cuotas` y el detalle de pago incluye `aplicaciones`.
-Si se omite emisión se usa CURRENT_DATE de PostgreSQL; vencimiento no puede
-ser anterior a emisión. No se permite definir manualmente saldo ni estado.
-
-Ejemplo de solicitud:
-
-```json
-{"tipo_operacion":"cobro","id_cxc":1,"monto":50000,"metodo_pago":"simulado","descripcion":"Abono"}
-```
-
-Orígenes mutuamente excluyentes:
-
-- `cobro`: solo `id_cxc`.
-- `proveedor`: solo `id_cxp`.
-- `nomina`: `id_nomina` e `id_empleado`.
-- `reembolso`: solo `id_reembolso`.
-
-Métodos: `efectivo`, `transferencia`, `tarjeta`, `simulado`.
-Una ejecución repetida devuelve 409 y no crea un movimiento adicional.
-Varias solicitudes sobre una misma deuda se validan de nuevo al ejecutar.
-
-Errores: 400 entrada inválida o referencias incompatibles; 403 mock deshabilitado
-o entorno no local; 404 registro inexistente; 409 referencia duplicada,
-estado incompatible o saldo insuficiente. Crear devuelve 201; decidir/ejecutar 200.
-
-## Validación y alcance pendiente
-
-El frontend conserva la demostración original en localStorage; no consume esta
-API. La conexión del frontend y la alineación con maestros externos y sus FK
-siguen fuera del alcance de este backend.
-
-La autenticación real, idempotencia de creación y unicidad de obligaciones de
-nómina/reembolso requieren definición posterior.
-
-**Nota técnica:** la tabla `finanzas.cuenta_financiera` tiene la restricción
-`ck_caja_unica`, que limita la caja a `id_cuenta = 1`. No se pueden crear varias
-cuentas financieras sin cambiar esa restricción del esquema.
+Los módulos anteriores no se registran. Ver [modelo y migración](../../../docs/MODELO_CENTRAL.md).

@@ -152,11 +152,6 @@ function Dashboard({ onNavigate }: { onNavigate: (page: FinancePage) => void }) 
             </article>
           </section>
 
-          <article className="metric-card net-summary">
-            <h2>Beneficio Neto</h2>
-            <p className="metric-value">$73,130.00 <span className="metric-change is-positive">+15%</span></p>
-          </article>
-
           <MonthlyChart />
         </main>
     </FinanceLayout>

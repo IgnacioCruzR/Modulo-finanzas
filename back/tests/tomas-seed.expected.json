@@ -1,0 +1,75 @@
+{
+    "cuentas":  [
+                    {
+                        "id_venta":  "5001",
+                        "monto_total":  "200000.00",
+                        "saldo_pendiente":  "100000.00",
+                        "abono":  "100000.00",
+                        "metodo_pago":  "tarjeta"
+                    },
+                    {
+                        "id_venta":  "5002",
+                        "monto_total":  "240000.00",
+                        "saldo_pendiente":  "120000.00",
+                        "abono":  "120000.00",
+                        "metodo_pago":  "transferencia"
+                    },
+                    {
+                        "id_venta":  "5003",
+                        "monto_total":  "180000.00",
+                        "saldo_pendiente":  "90000.00",
+                        "abono":  "90000.00",
+                        "metodo_pago":  "tarjeta"
+                    },
+                    {
+                        "id_venta":  "5004",
+                        "monto_total":  "320000.00",
+                        "saldo_pendiente":  "160000.00",
+                        "abono":  "160000.00",
+                        "metodo_pago":  "transferencia"
+                    },
+                    {
+                        "id_venta":  "5005",
+                        "monto_total":  "150000.00",
+                        "saldo_pendiente":  "75000.00",
+                        "abono":  "75000.00",
+                        "metodo_pago":  "tarjeta"
+                    },
+                    {
+                        "id_venta":  "5006",
+                        "monto_total":  "275000.00",
+                        "saldo_pendiente":  "125000.00",
+                        "abono":  "150000.00",
+                        "metodo_pago":  "transferencia"
+                    },
+                    {
+                        "id_venta":  "5007",
+                        "monto_total":  "210000.00",
+                        "saldo_pendiente":  "110000.00",
+                        "abono":  "100000.00",
+                        "metodo_pago":  "tarjeta"
+                    },
+                    {
+                        "id_venta":  "5008",
+                        "monto_total":  "190000.00",
+                        "saldo_pendiente":  "95000.00",
+                        "abono":  "95000.00",
+                        "metodo_pago":  "transferencia"
+                    },
+                    {
+                        "id_venta":  "5009",
+                        "monto_total":  "350000.00",
+                        "saldo_pendiente":  "175000.00",
+                        "abono":  "175000.00",
+                        "metodo_pago":  "tarjeta"
+                    },
+                    {
+                        "id_venta":  "5010",
+                        "monto_total":  "225000.00",
+                        "saldo_pendiente":  "115000.00",
+                        "abono":  "110000.00",
+                        "metodo_pago":  "transferencia"
+                    }
+                ],
+    "commit":  "bdf3acd"
+}

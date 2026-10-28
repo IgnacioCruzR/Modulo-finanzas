@@ -1,13 +1,23 @@
 {
-  "nota": "Contratos propuestos de API; no son tablas ni endpoints implementados. IDs externos simulados para Sprint 2.",
-  "crear_cuenta_cobrar": {"metodo": "POST", "ruta": "/api/finanzas/cuentas-cobrar", "body": {"id_venta": 101, "id_cliente": 20, "monto_total": 150000, "fecha_vencimiento": "2026-11-25"}},
-  "crear_cuenta_pagar": {"metodo": "POST", "ruta": "/api/finanzas/cuentas-pagar", "body": {"id_oc": 75, "id_proveedor": 12, "monto_total": 300000, "fecha_vencimiento": "2026-11-25"}},
-  "solicitar_cobro": {"metodo": "POST", "ruta": "/api/finanzas/pagos", "body": {"id_cxc": 1, "tipo_operacion": "cobro", "monto": 50000, "metodo_pago": "simulado", "descripcion": "Abono de venta"}},
-  "solicitar_pago_proveedor": {"metodo": "POST", "ruta": "/api/finanzas/pagos", "body": {"id_cxp": 1, "tipo_operacion": "proveedor", "monto": 120000, "metodo_pago": "transferencia", "descripcion": "Abono proveedor"}},
-  "rechazar_pago": {"metodo": "POST", "ruta": "/api/finanzas/pagos/2/decision", "body": {"decision": "rechazada", "observacion": "Documentación incompleta"}, "nota": "El id_autorizador se obtiene de sesión autenticada; no del body"},
-  "aprobar_pago": {"metodo": "POST", "ruta": "/api/finanzas/pagos/1/decision", "body": {"decision": "aprobada", "observacion": "Validado"}},
-  "ejecutar_pago": {"metodo": "POST", "ruta": "/api/finanzas/pagos/1/ejecutar", "body": {}},
-  "consultar_estado_para_compras": {"metodo": "GET", "ruta": "/api/finanzas/cuentas-pagar?orden_compra=75"},
-  "consultar_estado_para_ventas": {"metodo": "GET", "ruta": "/api/finanzas/cuentas-cobrar?venta=101"},
-  "consultar_saldo": {"metodo": "GET", "ruta": "/api/finanzas/caja/saldo"}
+    "rechazo":  {
+                    "decision":  "rechazada",
+                    "observacion":  "Solicitud no autorizada"
+                },
+    "cuenta_cobrar":  {
+                          "monto_total":  100000,
+                          "id_venta":  7001
+                      },
+    "operacion":  {
+                      "id_cxp":  1,
+                      "descripcion":  "Abono a orden de compra",
+                      "metodo_pago":  "transferencia",
+                      "monto":  1000
+                  },
+    "cuenta_pagar":  {
+                         "id_oc":  8001,
+                         "monto_total":  200000
+                     },
+    "aprobacion":  {
+                       "decision":  "aprobada"
+                   }
 }
