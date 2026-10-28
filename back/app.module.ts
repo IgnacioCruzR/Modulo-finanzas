@@ -33,7 +33,6 @@ import { FinanzasV2Module } from './Finanzas/v2/finanzas-v2.module';
           ssl: config.get('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
           autoLoadEntities: true, // toma las entidades registradas con forFeature
           synchronize: false, // las tablas las crea el script SQL, no el ORM
-          extra: { options: `-c search_path=${schema}` },
         };
       },
     }),

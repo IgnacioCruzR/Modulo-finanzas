@@ -1,43 +1,19 @@
 name: finanzas-local
 
 services:
-  postgres:
-    image: postgres:17
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: erp_local
-      POSTGRES_USER: erp_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configura POSTGRES_PASSWORD en .env}
-    ports:
-      - "127.0.0.1:15433:5432"
-    volumes:
-      - pg_finanzas_v2:/var/lib/postgresql/data
-      - ./database/local/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      - ./database/local/sql/02_operaciones.sql:/docker-entrypoint-initdb.d/02_operaciones.sql:ro
-      - ./database/local/sql/04_cuotas.sql:/docker-entrypoint-initdb.d/04_cuotas.sql:ro
-      - ./database/local/sql/06_modelo_central.sql:/docker-entrypoint-initdb.d/06_modelo_central.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U erp_user -d erp_local"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   api:
     build: ./back
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: erp_local
-      DB_USER: erp_user
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?Configura POSTGRES_PASSWORD en .env}
-      DB_SCHEMA: finanzas
-      DB_SSL: "false"
-      APP_ENV: local
-      MOCK_AUTH_ENABLED: "true"
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SCHEMA: ${DB_SCHEMA:-finanzas}
+      DB_SSL: ${DB_SSL}
+      APP_ENV: ${APP_ENV:-local}
+      MOCK_AUTH_ENABLED: ${MOCK_AUTH_ENABLED:-true}
       INTEGRATION_MODE: ${INTEGRATION_MODE:-local-fixtures}
       INTEGRATION_VENTA_URL: ${INTEGRATION_VENTA_URL:-}
       INTEGRATION_ORDEN_COMPRA_URL: ${INTEGRATION_ORDEN_COMPRA_URL:-}
@@ -66,6 +42,3 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-
-volumes:
-  pg_finanzas_v2:
