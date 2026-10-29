@@ -214,7 +214,7 @@
   transition: border-color 0.15s, background 0.15s;
 }
 
-.pr-option-card:hover {
+.pr-option-card:hover:not(.is-disabled) {
   border-color: #e6ab1b;
 }
 
@@ -222,6 +222,11 @@
   border-color: #e6ab1b;
   background: #fffaf0;
   box-shadow: 0 0 0 3px #ffc5332b;
+}
+
+.pr-option-card.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .pr-option-card input,

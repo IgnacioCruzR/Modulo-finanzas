@@ -1,4 +1,5 @@
-// Contrato de POST /api/finanzas/pagos (CrearPagoDto en back/Finanzas/v2/finanzas-v2.dto.ts).
+// Contrato de POST /api/finanzas/operaciones (CrearOperacionDto).
+// El tipo de operación se usa en la interfaz; la API lo deduce de la referencia.
 export const operationTypes = ['cobro', 'proveedor', 'nomina', 'reembolso'] as const;
 export const paymentMethods = ['efectivo', 'transferencia', 'tarjeta', 'simulado'] as const;
 
@@ -7,13 +8,10 @@ export type PaymentMethod = typeof paymentMethods[number];
 export type AccountStatus = 'pendiente' | 'parcial' | 'pagada' | 'anulada';
 
 export interface CreatePaymentRequestPayload {
-  tipo_operacion: OperationType;
   monto: number;
   metodo_pago: PaymentMethod;
   id_cxc?: number;
   id_cxp?: number;
-  id_empleado?: number;
-  id_nomina?: number;
   id_reembolso?: number;
   descripcion?: string;
 }

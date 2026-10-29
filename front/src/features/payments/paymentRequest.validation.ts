@@ -1,12 +1,13 @@
 import type {
   AccountOption,
   CreatePaymentRequestPayload,
+  OperationType,
   PaymentRequestErrors,
   PaymentRequestFormValues,
 } from './paymentRequest.types';
 import { operationTypes, paymentMethods } from './paymentRequest.types';
 
-// Límites espejo de CrearPagoDto para rechazar en cliente lo que el backend rechazaría.
+// Límites espejo de CrearOperacionDto.
 export const MAX_AMOUNT = 9999999999999.99;
 export const MAX_DESCRIPTION_LENGTH = 2000;
 
@@ -66,10 +67,7 @@ export function validatePaymentRequest(values: PaymentRequestFormValues, account
     else if (!account) errors.accountId = `La ${label} seleccionada no existe.`;
     else if (!isPayable(account)) errors.accountId = `La ${label} está ${account.status} y no admite pagos.`;
   }
-  if (operationType === 'nomina') {
-    errors.payrollId = validateIdentifier(values.payrollId, 'ID de nómina');
-    errors.employeeId = validateIdentifier(values.employeeId, 'ID de empleado');
-  }
+  if (operationType === 'nomina') errors.operationType = 'Los pagos de nómina no están disponibles en esta versión.';
   if (operationType === 'reembolso') {
     errors.refundId = validateIdentifier(values.refundId, 'ID de reembolso');
   }
@@ -101,23 +99,25 @@ export function validatePaymentRequest(values: PaymentRequestFormValues, account
   return errors;
 }
 
-/** Arma el cuerpo de POST /pagos con solo las referencias que admite cada tipo de operación. */
+export function operationTypeFromPayload(payload: CreatePaymentRequestPayload): Exclude<OperationType, 'nomina'> {
+  if (payload.id_cxc !== undefined) return 'cobro';
+  if (payload.id_cxp !== undefined) return 'proveedor';
+  return 'reembolso';
+}
+
+/** Arma el cuerpo de POST /operaciones; solo incluye campos de CrearOperacionDto. */
 export function buildPaymentRequestPayload(values: PaymentRequestFormValues): CreatePaymentRequestPayload {
   if (!values.operationType || !values.method) throw new Error('El formulario no está completo.');
+  if (values.operationType === 'nomina') throw new Error('Los pagos de nómina no están disponibles en esta versión.');
   const amount = parseAmount(values.amount);
   if (amount === null) throw new Error('El monto no es válido.');
 
   const payload: CreatePaymentRequestPayload = {
-    tipo_operacion: values.operationType,
     monto: amount,
     metodo_pago: values.method,
   };
   if (values.operationType === 'cobro') payload.id_cxc = Number(values.accountId);
   if (values.operationType === 'proveedor') payload.id_cxp = Number(values.accountId);
-  if (values.operationType === 'nomina') {
-    payload.id_nomina = parseIdentifier(values.payrollId) ?? undefined;
-    payload.id_empleado = parseIdentifier(values.employeeId) ?? undefined;
-  }
   if (values.operationType === 'reembolso') payload.id_reembolso = parseIdentifier(values.refundId) ?? undefined;
 
   const description = values.description.trim();

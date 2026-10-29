@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { FinanceLayout, type FinancePage } from '../../shared/layout/FinanceLayout';
 import { api } from '../../shared/services/api/client';
+import { submitPaymentRequest } from './paymentRequest.api';
 import type {
   AccountOption,
   AccountStatus,
@@ -15,6 +16,7 @@ import {
   MAX_DESCRIPTION_LENGTH,
   accountsFor,
   buildPaymentRequestPayload,
+  operationTypeFromPayload,
   isPayable,
   parseAmount,
   selectedAccount,
@@ -33,7 +35,7 @@ const dateFormat = new Intl.DateTimeFormat('es-CL');
 const operationOptions: { value: OperationType; label: string; hint: string; icon: string }[] = [
   { value: 'cobro', label: 'Cobro a cliente', hint: 'Abono a una cuenta por cobrar', icon: '↓' },
   { value: 'proveedor', label: 'Pago a proveedor', hint: 'Abono a una cuenta por pagar', icon: '↑' },
-  { value: 'nomina', label: 'Pago de nómina', hint: 'Remuneración de un empleado', icon: '◎' },
+  { value: 'nomina', label: 'Pago de nómina', hint: 'No disponible en esta versión', icon: '◎' },
   { value: 'reembolso', label: 'Reembolso', hint: 'Devolución de gastos', icon: '↺' },
 ];
 
@@ -109,23 +111,6 @@ async function loadAccounts(operationType: OperationType): Promise<AccountOption
   const endpoint = operationType === 'cobro' ? '/cuentas-cobrar' : '/cuentas-pagar';
   const rows = await api<ApiCuenta[]>(endpoint);
   return rows.map((row) => normalizeAccountOption(row, operationType === 'cobro' ? 'cobrar' : 'pagar'));
-}
-
-async function submitPaymentRequest(payload: CreatePaymentRequestPayload) {
-  const response = await api<{ id_operacion?: string; id_cxc?: string | number | null; id_cxp?: string | number | null; id_reembolso?: string | number | null; monto?: string | number; metodo_pago?: string | null; descripcion?: string | null; estado?: string | null; }>(
-    '/operaciones',
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-
-  return {
-    tipo_operacion: payload.tipo_operacion,
-    monto: Number(response.monto ?? payload.monto),
-    metodo_pago: payload.metodo_pago,
-    descripcion: payload.descripcion,
-    ...(payload.id_cxc !== undefined ? { id_cxc: payload.id_cxc } : {}),
-    ...(payload.id_cxp !== undefined ? { id_cxp: payload.id_cxp } : {}),
-    ...(payload.id_reembolso !== undefined ? { id_reembolso: payload.id_reembolso } : {}),
-  } as CreatePaymentRequestPayload;
 }
 
 function FieldError({ field, errors }: { field: PaymentRequestField; errors: PaymentRequestErrors }) {
@@ -311,9 +296,9 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
         {registered ? (
           <section className="pr-panel pr-success" role="status" aria-labelledby="pr-success-title">
             <span className="pr-success-icon" aria-hidden="true">✓</span>
-            <h2 id="pr-success-title">Solicitud validada y lista para enviar</h2>
+            <h2 id="pr-success-title">Solicitud registrada</h2>
             <p>
-              {operationLabel(registered.tipo_operacion)} por <strong>{currency.format(registered.monto)}</strong> mediante {methodLabel(registered.metodo_pago).toLocaleLowerCase('es-CL')}.
+              {operationLabel(operationTypeFromPayload(registered))} por <strong>{currency.format(registered.monto)}</strong> mediante {methodLabel(registered.metodo_pago).toLocaleLowerCase('es-CL')}.
               La solicitud se envió a la API y quedó en estado <strong>pendiente</strong> hasta que un administrador la apruebe.
             </p>
             <details className="pr-payload">
@@ -355,13 +340,14 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
                   aria-describedby={describedBy('operationType')}
                 >
                   {operationOptions.map((option, index) => (
-                    <label key={option.value} className={`pr-option-card${values.operationType === option.value ? ' is-selected' : ''}`}>
+                    <label key={option.value} className={`pr-option-card${values.operationType === option.value ? ' is-selected' : ''}${option.value === 'nomina' ? ' is-disabled' : ''}`}>
                       <input
                         type="radio"
                         name="operationType"
                         id={index === 0 ? fieldId('operationType') : undefined}
                         value={option.value}
                         checked={values.operationType === option.value}
+                        disabled={option.value === 'nomina'}
                         onChange={() => changeOperation(option.value)}
                       />
                       <span className="pr-option-icon" aria-hidden="true">{option.icon}</span>
@@ -568,9 +554,8 @@ function PaymentRequestPage({ onNavigate }: { onNavigate: (page: FinancePage) =>
       {candidate && (
         <ConfirmModal onClose={() => { if (!submitting) setCandidate(null); }}>
           <dl className="pr-summary-list pr-modal-summary">
-            <div><dt>Operación</dt><dd>{operationLabel(candidate.tipo_operacion)}</dd></div>
+            <div><dt>Operación</dt><dd>{operationLabel(operationTypeFromPayload(candidate))}</dd></div>
             {account && <div><dt>{accountLabel}</dt><dd>#{account.id} · {account.counterparty}</dd></div>}
-            {candidate.id_nomina && <div><dt>Nómina / empleado</dt><dd>{candidate.id_nomina} / {candidate.id_empleado}</dd></div>}
             {candidate.id_reembolso && <div><dt>Reembolso</dt><dd>{candidate.id_reembolso}</dd></div>}
             <div><dt>Método</dt><dd>{methodLabel(candidate.metodo_pago)}</dd></div>
             {candidate.descripcion && <div><dt>Descripción</dt><dd>{candidate.descripcion}</dd></div>}

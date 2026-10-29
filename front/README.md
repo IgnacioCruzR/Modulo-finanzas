@@ -1,4 +1,15 @@
 # Frontend
+El formulario Registrar pago envia el contrato de /api/finanzas/operaciones:
+id_cxc, id_cxp o id_reembolso, monto, metodo_pago y descripcion opcional.
+El tipo se mantiene en la interfaz y no se envia como tipo_operacion.
+Nomina permanece deshabilitada mientras no forme parte del modelo del backend.
+
+Prueba aislada del formulario (sin acceso a Neon):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-FormularioPago.ps1
+```
+
 
 Aplicación web del módulo financiero, construida con React, TypeScript y Vite.
 

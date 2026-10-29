@@ -1,4 +1,42 @@
 # Uso local
+## Base compartida del profesor (Neon)
+Con las credenciales de Neon en el .env privado y DB_SSL=true, iniciar solamente
+el Compose principal, sin compose.local.yaml:
+
+```powershell
+docker compose up -d --build --wait
+```
+
+El frontend sigue en localhost:8080, pero las consultas y operaciones usan la base
+compartida si2_22026, esquema finanzas. No versionar ni compartir el .env en Git.
+La configuracion local previa de este equipo esta respaldada en un archivo
+.env.local-before-neon-*.bak, tambien excluido de Git. El volumen local se conserva.
+Para volver al PostgreSQL local, usar el complemento del apartado siguiente;
+este mantiene su clave local en POSTGRES_PASSWORD y no necesita copiar datos de Neon.
+Los pasos de migracion y seeders de esta guia corresponden al entorno local:
+el cambio de conexion a Neon no requiere ejecutarlos sobre la base compartida.
+
+## Arranque local con el Compose actual
+El Compose base ahora usa el servidor indicado por DB_HOST (por ejemplo Neon) y
+no define PostgreSQL. Para usar la base local conservada, agregar compose.local.yaml:
+
+```powershell
+docker compose -f compose.yaml -f compose.local.yaml up -d --build --wait
+```
+
+Si este equipo requiere su CA publica durante npm:
+
+```powershell
+docker compose -f compose.yaml -f compose.local.yaml -f compose.ca.yaml build
+docker compose -f compose.yaml -f compose.local.yaml up -d --no-build --wait
+```
+
+El complemento reutiliza finanzas-local_pg_finanzas_v2, conserva los datos y
+configura la API hacia postgres:5432. Para comandos de postgres descritos abajo,
+usar siempre `docker compose -f compose.yaml -f compose.local.yaml` en lugar de
+`docker compose`. Las instrucciones antiguas sobre cuotas/05_seeders.sql que
+persisten mas abajo son del modelo anterior: no aplicarlas sobre las seis tablas.
+
 Usar compose.yaml de la raíz. El Compose de back/ pertenece al modelo anterior.
 
 ## Arranque
