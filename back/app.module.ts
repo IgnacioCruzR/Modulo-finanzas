@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { resolve } from 'node:path';
 import { FinanzasV2Module } from './Finanzas/v2/finanzas-v2.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { FinanzasV2Module } from './Finanzas/v2/finanzas-v2.module';
         };
       },
     }),
+    AuthModule,
     // Se conserva el código anterior, pero no se registran sus rutas:
     // sus tablas no forman parte del modelo v2 aprobado.
     FinanzasV2Module,

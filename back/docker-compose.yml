@@ -34,6 +34,8 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-erp_pass}
       DB_SCHEMA: finanzas
       DB_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-desarrollo-finanzas-cambiar-clave}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       PORT: 3000
     ports:
       - "3000:3000"

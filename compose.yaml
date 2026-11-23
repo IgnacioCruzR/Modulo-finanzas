@@ -14,6 +14,8 @@ services:
       DB_SSL: ${DB_SSL}
       APP_ENV: ${APP_ENV:-local}
       MOCK_AUTH_ENABLED: ${MOCK_AUTH_ENABLED:-true}
+      JWT_SECRET: ${JWT_SECRET:-desarrollo-finanzas-cambiar-clave}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       INTEGRATION_MODE: ${INTEGRATION_MODE:-local-fixtures}
       INTEGRATION_VENTA_URL: ${INTEGRATION_VENTA_URL:-}
       INTEGRATION_ORDEN_COMPRA_URL: ${INTEGRATION_ORDEN_COMPRA_URL:-}

@@ -90,5 +90,7 @@ manualmente `database/migrations/20261023_outgoing_payments.sql` en el esquema
 `finanzas`, y carga obligaciones reales desde Compras o Recursos Humanos. La
 migración no se ejecuta al iniciar la API y no incorpora datos ficticios.
 
-Este backend todavía no tiene autenticación ni control de roles; proteger las rutas
-para administradores antes de habilitarlas en un entorno compartido.
+Las rutas financieras están protegidas con JWT y control de roles. `POST /auth/login`
+permanece público y los usuarios de prueba se crean automáticamente si la tabla
+`finanzas.usuario_seguridad` está vacía. En producción configure `JWT_SECRET`
+y no utilice las claves ni credenciales de desarrollo.

@@ -12,6 +12,6 @@
     "emitDecoratorMetadata": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["main.ts", "app.module.ts", "Finanzas/**/*.ts"],
+  "include": ["main.ts", "app.module.ts", "auth/**/*.ts", "Finanzas/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
