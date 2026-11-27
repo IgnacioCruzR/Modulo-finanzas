@@ -32,7 +32,7 @@ export class FinanzasV2Service {
     return this.operation(async () => {
       // Falla también si solo se aplicó el esquema anterior.
       await this.db.query('SELECT id_operacion FROM finanzas.operacion_financiera LIMIT 0');
-      return { estado: 'ok', modelo: 'finanzas-central', autenticacion: 'mock-local', integracion: this.externos.modo, modo: 'transaccional' };
+      return { estado: 'ok', modelo: 'finanzas-central', integracion: this.externos.modo, modo: 'transaccional' };
     });
   }
   listarCuentas(tipo: TipoCuenta, filtros: FiltrosCuentaDto) {

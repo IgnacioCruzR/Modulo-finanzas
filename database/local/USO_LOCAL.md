@@ -7,8 +7,12 @@ el Compose principal, sin compose.local.yaml:
 docker compose up -d --build --wait
 ```
 
-El frontend sigue en localhost:8080, pero las consultas y operaciones usan la base
-compartida si2_22026, esquema finanzas. No versionar ni compartir el .env en Git.
+El frontend sigue en localhost:8080. Con Neon, `/api/finanzas/salud` comprueba la
+conexión a la base compartida `si2_22026`, esquema `finanzas`. El administrador y
+las referencias de prueba están restringidos al entorno local. Las rutas de
+negocio en Neon requieren la futura autenticación real del ERP. Configura
+`APP_ENV=production`, `MOCK_AUTH_ENABLED=false` e `INTEGRATION_MODE=http` en el
+`.env` de la base compartida. Mantén el archivo fuera de Git.
 La configuracion local previa de este equipo esta respaldada en un archivo
 .env.local-before-neon-*.bak, tambien excluido de Git. El volumen local se conserva.
 Para volver al PostgreSQL local, usar el complemento del apartado siguiente;

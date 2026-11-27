@@ -10,10 +10,20 @@ export class IdFinanzasPipe implements PipeTransform<string, string> {
   }
 }
 @Controller('api/finanzas')
+export class FinanzasSaludController {
+  constructor(private readonly service: FinanzasV2Service, private readonly admin: MockAdminGuard) {}
+
+  @Get('salud')
+  async salud() {
+    const salud = await this.service.health();
+    return { ...salud, autenticacion: this.admin.habilitado ? 'mock-local' : 'no-configurada' };
+  }
+}
+
+@Controller('api/finanzas')
 @UseGuards(MockAdminGuard)
 export class FinanzasV2Controller {
   constructor(private readonly service: FinanzasV2Service) {}
-  @Get('salud') salud() { return this.service.health(); }
   @Get('usuario') usuario() { return ADMIN_PRUEBA; }
   @Get('cuentas-cobrar') cuentasCobrar(@Query() f: FiltrosCuentaDto) { return this.service.listarCuentas('cobrar', f); }
   @Get('cuentas-cobrar/:id') cuentaCobrar(@Param('id', IdFinanzasPipe) id: string) { return this.service.obtenerCuenta('cobrar', id); }

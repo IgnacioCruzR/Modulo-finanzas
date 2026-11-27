@@ -52,8 +52,9 @@ try {
     Start-Sleep -Seconds 1
   }
   if (!$taskReady) { throw 'La API de pruebas no inició.' }
-  Invoke-TaskDocker cp back/tests/central.integration.cjs "${taskApi}:/app/central.integration.cjs"
-  Invoke-TaskDocker exec -e FINANZAS_TEST_ISOLATED=1 $taskApi node --test /app/central.integration.cjs
+  Invoke-TaskDocker exec $taskApi mkdir -p /app/tests
+  Invoke-TaskDocker cp back/tests/central.integration.cjs "${taskApi}:/app/tests/central.integration.cjs"
+  Invoke-TaskDocker exec -e FINANZAS_TEST_ISOLATED=1 $taskApi node --test /app/tests/central.integration.cjs
   Invoke-TaskDocker run --rm --network $taskNetwork -e "FINANZAS_TEST_API=http://${taskApi}:3000" $taskFrontImage sh -c 'node_modules/.bin/esbuild src/features/payments/cash.api.ts --bundle --platform=node --format=cjs --outfile=/tmp/cash-client.cjs && node --test tests/cash-date.cjs tests/central-flow.cjs'
   Invoke-TaskSql erp_local 'database/local/sql/07_seeders.sql'
   $taskBefore = & docker exec $taskPg psql -U erp_user -d erp_local -Atc "SELECT (SELECT count(*) FROM finanzas.operacion_financiera)||':'||saldo_actual FROM finanzas.v_saldo_caja"
@@ -68,9 +69,9 @@ try {
   Invoke-TaskSql erp_local 'seeders_finanzas.sql'
   $taskAfter = & docker exec $taskPg psql -U erp_user -d erp_local -Atc "SELECT (SELECT count(*) FROM finanzas.operacion_financiera)||':'||saldo_actual FROM finanzas.v_saldo_caja"
   if ($taskBefore -ne $taskAfter) { throw 'El escenario de Tomas duplico operaciones o cambio el saldo al repetirse.' }
-  Invoke-TaskDocker cp back/tests/tomas-seed.integration.cjs "${taskApi}:/app/tomas-seed.integration.cjs"
-  Invoke-TaskDocker cp back/tests/tomas-seed.expected.json "${taskApi}:/app/tomas-seed.expected.json"
-  Invoke-TaskDocker exec -e FINANZAS_TEST_ISOLATED=1 $taskApi node --test /app/tomas-seed.integration.cjs
+  Invoke-TaskDocker cp back/tests/tomas-seed.integration.cjs "${taskApi}:/app/tests/tomas-seed.integration.cjs"
+  Invoke-TaskDocker cp back/tests/tomas-seed.expected.json "${taskApi}:/app/tests/tomas-seed.expected.json"
+  Invoke-TaskDocker exec -e FINANZAS_TEST_ISOLATED=1 $taskApi node --test /app/tests/tomas-seed.integration.cjs
   Invoke-TaskDocker run --rm --network $taskNetwork -e "FINANZAS_TEST_API=http://${taskApi}:3000" $taskFrontImage sh -c 'node_modules/.bin/esbuild src/features/payments/cash.api.ts --bundle --platform=node --format=cjs --outfile=/tmp/cash-client.cjs && node --test tests/tomas-seed-query.cjs'
   Write-Output 'Pruebas completadas: migración, API, cliente React, concurrencia y seed repetible.'
 }

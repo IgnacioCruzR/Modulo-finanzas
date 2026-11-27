@@ -4,7 +4,7 @@ Prefijo: `/api/finanzas`. BIGINT y NUMERIC se devuelven como cadenas.
 
 | Método | Ruta | Uso |
 |---|---|---|
-| GET | /salud | Verifica el modelo activo y la conexión |
+| GET | /salud | Verifica el modelo activo y la conexión sin credenciales |
 | GET | /usuario | Administrador 1 local |
 | GET, POST | /cuentas-cobrar | Consultar o recibir una obligación de Ventas |
 | GET | /cuentas-cobrar/:id | Detalle |
@@ -38,16 +38,47 @@ se rechazan. Una segunda decisión devuelve 409 y no duplica movimientos.
 Filtros de cuentas: estado y venta/orden_compra. De operaciones: estado
 (pendiente/rechazada/ejecutada) y origen (cobro/proveedor/reembolso).
 
-400 entrada inválida; 403 mock no habilitado; 404 referencia interna inexistente;
-409 estado, duplicado o saldo incompatible; 503 integración externa no disponible.
-Creaciones: 201; decisiones: 200.
+Las creaciones devuelven `201` y las decisiones `200`. Las rutas de negocio
+devuelven `403` cuando la autenticación de prueba no está habilitada.
 
 ## Entorno
 Node 22 y PostgreSQL 17. Configuración .env en back/ o raíz; synchronize=false.
-APP_ENV=local, MOCK_AUTH_ENABLED=true y base erp_local permiten Administrador 1.
-INTEGRATION_MODE=local-fixtures valida las referencias de prueba documentadas.
-Para HTTP configurar INTEGRATION_VENTA_URL, INTEGRATION_ORDEN_COMPRA_URL,
-INTEGRATION_REEMBOLSO_URL e INTEGRATION_USUARIO_URL. Los endpoints definitivos
-y la autenticación real se acordarán con los otros módulos.
+El Administrador 1 requiere `MOCK_AUTH_ENABLED=true`, `APP_ENV=local` o `test`,
+y la base `erp_local` en `localhost`, `127.0.0.1`, `::1`, `postgres` o `db`.
+Fuera de ese entorno, salud informa `autenticacion: "no-configurada"`.
+La autenticación real del actor queda pendiente del contrato con RRHH.
 
-Los módulos anteriores no se registran. Ver [modelo y migración](../../../docs/MODELO_CENTRAL.md).
+## Validación externa
+
+`INTEGRATION_MODE=local-fixtures` usa los siguientes IDs, con los mismos
+requisitos de entorno y base del administrador simulado.
+
+| Recurso | IDs de prueba | Prefijo de configuración |
+|---|---|---|
+| Venta | 101, 5001–5010, 7001–7012 | `INTEGRATION_VENTA` |
+| Orden de compra | 75, 7001, 8001–8012 | `INTEGRATION_ORDEN_COMPRA` |
+| Reembolso | 9001, 9002 | `INTEGRATION_REEMBOLSO` |
+| Usuario habilitado para decidir operaciones | 1 | `INTEGRATION_USUARIO` |
+
+`INTEGRATION_MODE=http` es el modo predeterminado. Cada recurso sin adaptador
+seleccionado devuelve `503`. Si existe un puente confirmado que implementa el
+contrato histórico de Finanzas, configura `<PREFIJO>_ADAPTER=http-bridge` y
+`<PREFIJO>_URL` con su URL base. El puente hace `GET {URL}/{id}` y verifica
+`200 application/json` con `{ "id": "<id solicitado>", "habilitada": true }`.
+La URL base sola deja pendiente el adaptador. La selección se puede hacer por
+módulo también en local, manteniendo los fixtures en los demás recursos.
+`INTEGRATION_TIMEOUT_MS` admite de 1 a 30000 ms y el valor predeterminado es
+5000 ms. El plazo abarca la consulta y la lectura de la respuesta.
+
+| HTTP de Finanzas | Significado |
+|---|---|
+| `400` | ID o referencia externa inválida. Una referencia externa inexistente conserva el `400` que espera la API, incluso si el puente devuelve `404`. |
+| `404` | Cuenta u operación interna inexistente. |
+| `409` | Conflicto de negocio, como una referencia existente e inhabilitada, un `409` del puente, un duplicado local o saldo incompatible. |
+| `503` | Contrato pendiente, configuración inválida, fallo de red, timeout o respuesta incompatible. También se usa si el servicio externo rechaza la autenticación del puente. |
+
+Los contratos nativos y los puntos pendientes están en el
+[modelo y auditoría de integraciones](../../../docs/MODELO_CENTRAL.md#contratos-observados-y-pendientes).
+Las pruebas unitarias se ejecutan con `npm run test:integraciones --prefix back`.
+
+Ver [modelo y migración](../../../docs/MODELO_CENTRAL.md).

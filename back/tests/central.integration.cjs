@@ -2,9 +2,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { Client } = require('pg');
 const http = require('node:http');
-if (process.env.FINANZAS_TEST_ISOLATED !== '1' || process.env.DB_HOST !== 'db') throw new Error('Esta suite solo admite el PostgreSQL efímero con alias db.');
-const db = new Client({ host: process.env.DB_HOST, user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME, port: 5432 });
-const base = 'http://127.0.0.1:3000/api/finanzas';
+if (process.env.FINANZAS_TEST_ISOLATED !== '1' || process.env.DB_NAME !== 'erp_local' || !['db', '127.0.0.1'].includes(process.env.DB_HOST)) throw new Error('Esta suite solo admite PostgreSQL efímero.');
+const db = new Client({ host: process.env.DB_HOST, user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME, port: Number(process.env.DB_PORT ?? 5432) });
+const base = `http://127.0.0.1:${process.env.PORT ?? 3000}/api/finanzas`;
 async function req(path, body, status = 200) {
   const r = await fetch(base + path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await r.json(); assert.equal(r.status, status, JSON.stringify(data)); return data;
@@ -24,17 +24,23 @@ test('Modelo central: migración, API e integridad PostgreSQL', async t => {
       assert.equal((await scalar('SELECT saldo_actual FROM finanzas.v_saldo_caja')).saldo_actual, '10030000.00');
       assert.equal((await scalar('SELECT count(*)::int n FROM finanzas.operacion_financiera')).n, 4);
       assert.equal((await scalar("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='finanzas' AND column_name IN ('id_cliente','id_proveedor','cantidad_cuotas')")).n, 0);
-      assert.equal((await req('/salud')).modo, 'transaccional');
+      const salud = await req('/salud');
+      assert.equal(salud.modo, 'transaccional');
+      assert.equal(salud.autenticacion, 'mock-local');
       await req('/pagos', undefined, 404);
       await req('/operaciones/1/ejecutar', {}, 404);
     });
     let cxc, cxp, finalizada;
     await t.test('crea obligaciones sin terceros ni cuotas y valida integración y fechas', async () => {
+      assert.equal((await scalar('SELECT count(*)::int n FROM finanzas.cuenta_cobrar WHERE id_venta=7001')).n, 0);
+      assert.equal((await scalar('SELECT count(*)::int n FROM finanzas.cuenta_pagar WHERE id_oc=8001')).n, 0);
       cxc = await req('/cuentas-cobrar', { id_venta: 7001, monto_total: 100 }, 201);
       cxp = await req('/cuentas-pagar', { id_oc: 8001, monto_total: 100 }, 201);
       assert.equal(cxc.saldo_pendiente, '100.00');
       await req('/cuentas-cobrar', { id_venta: 7001, monto_total: 100 }, 409);
       await req('/cuentas-cobrar', { id_venta: 999999, monto_total: 100 }, 400);
+      await req('/cuentas-pagar', { id_oc: 999999, monto_total: 100 }, 400);
+      await req('/cuentas-cobrar/999999', undefined, 404);
       await req('/cuentas-pagar', { id_oc: 8002, monto_total: 100, id_proveedor: 1 }, 400);
       await req('/cuentas-cobrar', { id_venta: 7002, monto_total: 100, cantidad_cuotas: 2 }, 400);
       await req('/cuentas-cobrar', { id_venta: 7002, monto_total: 100, fecha_emision: '2026-10-20', fecha_vencimiento: '2026-10-19' }, 400);
@@ -107,7 +113,12 @@ test('Modelo central: migración, API e integridad PostgreSQL', async t => {
     });
     await t.test('adaptador HTTP comprueba existencia, habilitación y contrato; fallo cerrado', async () => {
       const { ConfigService } = require('@nestjs/config');
-      const { IntegracionExternaService } = require('/app/dist/Finanzas/v2/integracion-externa.service');
+      const { DataSource } = require('typeorm');
+      const { IntegracionExternaService } = require('../dist/Finanzas/v2/integracion-externa.service');
+      const { crearAdaptadoresReferencias } = require('../dist/Finanzas/v2/integraciones/adaptadores');
+      const { FinanzasV2Service } = require('../dist/Finanzas/v2/finanzas-v2.service');
+      const orm = new DataSource({ type: 'postgres', host: db.host, port: db.port,
+        database: db.database, username: db.user, password: db.password, schema: 'finanzas' });
       const server = http.createServer((r, s) => {
         s.setHeader('Content-Type', 'application/json');
         if (r.url === '/404') { s.statusCode = 404; return s.end('{}'); }
@@ -116,16 +127,22 @@ test('Modelo central: migración, API e integridad PostgreSQL', async t => {
       });
       await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
       const url = 'http://127.0.0.1:' + server.address().port;
-      const service = new IntegracionExternaService(new ConfigService({ INTEGRATION_MODE: 'http', INTEGRATION_VENTA_URL: url }));
+      const config = new ConfigService({ INTEGRATION_MODE: 'http', INTEGRATION_VENTA_ADAPTER: 'http-bridge', INTEGRATION_VENTA_URL: url });
+      const service = new IntegracionExternaService(config, crearAdaptadoresReferencias(config));
       try {
-        await service.validar('venta', '1');
-        await assert.rejects(() => service.validar('venta', '2'), e => e.getStatus() === 400);
+        await orm.initialize();
+        const finanzas = new FinanzasV2Service(orm, service);
+        assert.equal((await scalar('SELECT count(*)::int n FROM finanzas.cuenta_cobrar WHERE id_venta=1')).n, 0);
+        const cuenta = await finanzas.crearCuenta('cobrar', { id_venta: 1, monto_total: 100 });
+        assert.equal(cuenta.id_venta, '1');
+        await assert.rejects(() => service.validar('venta', '2'), e => e.getStatus() === 409);
         await assert.rejects(() => service.validar('venta', '404'), e => e.getStatus() === 400);
         await assert.rejects(() => service.validar('venta', '500'), e => e.getStatus() === 503);
         await assert.rejects(() => service.validar('reembolso', '1'), e => e.getStatus() === 503);
-        const fixture = new IntegracionExternaService(new ConfigService({ INTEGRATION_MODE: 'local-fixtures', APP_ENV: 'produccion' }));
-        await assert.rejects(() => fixture.validar('usuario', '1'), e => e.getStatus() === 503);
-      } finally { await new Promise(resolve => server.close(resolve)); }
+      } finally {
+        if (orm.isInitialized) await orm.destroy();
+        await new Promise(resolve => server.close(resolve));
+      }
       await assert.rejects(() => service.validar('venta', '1'), e => e.getStatus() === 503);
     });
   } finally { await db.end(); }

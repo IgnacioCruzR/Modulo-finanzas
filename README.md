@@ -16,7 +16,7 @@ Copiar `.env.example` a `.env` y definir la misma contraseña en
 `POSTGRES_PASSWORD` y `DB_PASSWORD`. No versionar `.env`.
 
 ```powershell
-docker compose up -d --build --wait
+docker compose -f compose.yaml -f compose.local.yaml up -d --build --wait
 ```
 
 Frontend: http://localhost:8080. API: http://localhost:3000/api/finanzas.
@@ -30,6 +30,7 @@ conservan sus demostraciones; Gestión de caja usa la API y PostgreSQL.
 
 ## Pruebas
 ```powershell
+npm run test:integraciones --prefix back
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ModeloCentral.ps1
 ```
 La suite crea su propia red interna y PostgreSQL efímero, sin puertos publicados,

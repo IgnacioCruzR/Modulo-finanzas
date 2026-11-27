@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test:integraciones": "npm run build && node --test tests/integracion-externa.test.cjs",
     "start": "node dist/main.js",
     "start:dev": "ts-node-dev --respawn --transpile-only main.ts"
   },
